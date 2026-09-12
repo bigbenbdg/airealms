@@ -1,0 +1,244 @@
+"""Seed world: 6 locations (matches prototype), NPCs, monsters, quests, shop items."""
+import json
+from .models import Monster
+
+LOCATIONS = [
+    {"id": "riverside_village", "name": "Riverside Village", "type": "town",
+     "description": "A modest village on the river. A blacksmith and an inn face the square."},
+    {"id": "oakhollow_forest", "name": "Oakhollow Forest", "type": "wild",
+     "description": "Tall oaks drip with moss. Wolves prowl between the trees."},
+    {"id": "capital_city", "name": "Capital City", "type": "town",
+     "description": "The bustling capital. Merchants shout, guards patrol, quests abound."},
+    {"id": "deep_cave", "name": "Deep Cave", "type": "dungeon",
+     "description": "A dark cave mouth. Something large breathes within."},
+    {"id": "sunken_marsh", "name": "Sunken Marsh", "type": "wild",
+     "description": "Knee-deep black water. Will-o'-wisps drift over the reeds."},
+    {"id": "ember_ridge", "name": "Ember Ridge", "type": "dungeon",
+     "description": "Volcanic rock glows faintly. The end-game hunting ground."},
+]
+
+EDGES = [
+    {"from": "riverside_village", "to": "oakhollow_forest", "direction": "north"},
+    {"from": "riverside_village", "to": "capital_city", "direction": "east"},
+    {"from": "oakhollow_forest", "to": "deep_cave", "direction": "north"},
+    {"from": "capital_city", "to": "sunken_marsh", "direction": "south"},
+    {"from": "sunken_marsh", "to": "ember_ridge", "direction": "east"},
+    {"from": "deep_cave", "to": "ember_ridge", "direction": "east"},
+]
+
+NPCS = [
+    {"npc_id": "npc_blacksmith", "name": "Old Toran", "location": "riverside_village",
+     "can_trade": True, "has_quest": True,
+     "dialogue": "Giant rats nest in Oakhollow Forest and chew through my stock. Slay 3 for me."},
+    {"npc_id": "npc_innkeeper", "name": "Mira the Innkeep", "location": "riverside_village",
+     "can_trade": True, "has_quest": False,
+     "dialogue": "Rest up, traveler. The forest is not kind to the wounded."},
+    {"npc_id": "npc_captain", "name": "Captain Voss", "location": "capital_city",
+     "can_trade": False, "has_quest": True,
+     "dialogue": "Trolls in the Deep Cave threaten our trade. Slay 2 cave trolls for the city!"},
+    {"npc_id": "npc_hermit", "name": "Marsh Hermit", "location": "sunken_marsh",
+     "can_trade": True, "has_quest": True,
+     "dialogue": "The marsh took my lantern. Slay marsh wraiths until one drops it."},
+    {"npc_id": "npc_scout", "name": "Scout Liora", "location": "oakhollow_forest",
+     "can_trade": False, "has_quest": True,
+     "dialogue": "Wolves grow bold and stalk the road. Thin the pack — slay 3 Forest Wolves."},
+    {"npc_id": "npc_merchant", "name": "Merchant Pella", "location": "capital_city",
+     "can_trade": True, "has_quest": True,
+     "dialogue": "Bandits rob my caravans on the capital road. Drive off 2 Road Bandits."},
+    {"npc_id": "npc_warden", "name": "Warden Cassia", "location": "ember_ridge",
+     "can_trade": False, "has_quest": True,
+     "dialogue": "Only proven slayers need apply: bring down an Ember Drake and the ridge is yours."},
+]
+
+QUESTS = {
+    # Quest chain tuned so completing everything carries an agent to ~level 5.
+    # xp_for_level = level * 200, so L1 needs 200 total, L1->L5 needs 2000.
+    "q_ratcatcher": {"title": "The Ratcatcher's Request", "kind": "kill",
+                     "target": "Giant Rat", "count": 3, "xp": 90, "gold": 45,
+                     "min_level": 1, "giver": "npc_blacksmith"},
+    "q_wolfpack": {"title": "Thin the Pack", "kind": "kill",
+                   "target": "Forest Wolf", "count": 3, "xp": 150, "gold": 80,
+                   "min_level": 2, "giver": "npc_scout"},
+    "q_bandit_toll": {"title": "The Bandit Toll", "kind": "kill",
+                      "target": "Road Bandit", "count": 2, "xp": 160, "gold": 100,
+                      "min_level": 2, "giver": "npc_merchant"},
+    "q_trollbane": {"title": "Trolls of the Deep Cave", "kind": "kill",
+                    "target": "Cave Troll", "count": 2, "xp": 220, "gold": 150,
+                    "min_level": 3, "giver": "npc_captain"},
+    "q_marshlight": {"title": "Light in the Marsh", "kind": "kill",
+                     "target": "Marsh Wraith", "count": 2, "xp": 180, "gold": 120,
+                     "min_level": 3, "giver": "npc_hermit"},
+    "q_drakescale": {"title": "Scale of Embers", "kind": "kill",
+                     "target": "Ember Drake", "count": 1, "xp": 400, "gold": 300,
+                     "min_level": 5, "giver": "npc_warden"},
+}
+
+SHOP = [
+    {"item_id": "itm_healing_potion", "name": "Healing Potion", "price": 15, "heal": 12},
+    {"item_id": "itm_iron_sword", "name": "Iron Sword", "price": 80, "bonus": 3},
+    {"item_id": "itm_leather_armor", "name": "Leather Armor", "price": 60, "max_hp_bonus": 5},
+]
+
+STARTER_INVENTORY = [
+    {"item_id": "itm_rusty_sword", "name": "Rusty Sword", "qty": 1, "equipped": True, "bonus": 1},
+    {"item_id": "itm_healing_potion", "name": "Healing Potion", "qty": 1, "equipped": False, "heal": 12},
+]
+
+MONSTER_SPAWNS = [
+    {"id": "mon_rat_1", "name": "Giant Rat", "location": "oakhollow_forest", "hp": 8, "xp_reward": 20, "gold_reward": 6},
+    {"id": "mon_rat_2", "name": "Giant Rat", "location": "oakhollow_forest", "hp": 8, "xp_reward": 20, "gold_reward": 6},
+    {"id": "mon_rat_3", "name": "Giant Rat", "location": "oakhollow_forest", "hp": 8, "xp_reward": 20, "gold_reward": 6},
+    {"id": "mon_wolf_1", "name": "Forest Wolf", "location": "oakhollow_forest", "hp": 14, "xp_reward": 35, "gold_reward": 10},
+    {"id": "mon_wolf_2", "name": "Forest Wolf", "location": "oakhollow_forest", "hp": 14, "xp_reward": 35, "gold_reward": 10},
+    {"id": "mon_wolf_3", "name": "Forest Wolf", "location": "oakhollow_forest", "hp": 14, "xp_reward": 35, "gold_reward": 10},
+    {"id": "mon_troll_1", "name": "Cave Troll", "location": "deep_cave", "hp": 30, "xp_reward": 80, "gold_reward": 40},
+    {"id": "mon_troll_2", "name": "Cave Troll", "location": "deep_cave", "hp": 30, "xp_reward": 80, "gold_reward": 40},
+    {"id": "mon_troll_3", "name": "Cave Troll", "location": "deep_cave", "hp": 30, "xp_reward": 80, "gold_reward": 40},
+    {"id": "mon_troll_4", "name": "Cave Troll", "location": "deep_cave", "hp": 30, "xp_reward": 80, "gold_reward": 40},
+    {"id": "mon_wraith_1", "name": "Marsh Wraith", "location": "sunken_marsh", "hp": 22, "xp_reward": 60, "gold_reward": 25},
+    {"id": "mon_wraith_2", "name": "Marsh Wraith", "location": "sunken_marsh", "hp": 22, "xp_reward": 60, "gold_reward": 25},
+    {"id": "mon_wraith_3", "name": "Marsh Wraith", "location": "sunken_marsh", "hp": 22, "xp_reward": 60, "gold_reward": 25},
+    {"id": "mon_drake_1", "name": "Ember Drake", "location": "ember_ridge", "hp": 45, "xp_reward": 140, "gold_reward": 90},
+    {"id": "mon_drake_2", "name": "Ember Drake", "location": "ember_ridge", "hp": 45, "xp_reward": 140, "gold_reward": 90},
+    {"id": "mon_bandit_1", "name": "Road Bandit", "location": "capital_city", "hp": 16, "xp_reward": 40, "gold_reward": 20},
+    {"id": "mon_bandit_2", "name": "Road Bandit", "location": "capital_city", "hp": 16, "xp_reward": 40, "gold_reward": 20},
+]
+
+# Hard cap: no location ever holds more than this many monster rows.
+MAX_MONSTERS_PER_LOCATION = 10
+
+
+MONSTER_DROPS = {
+    # monster name -> guaranteed/chance item drop shown on kill
+    "Giant Rat": {"item_id": "itm_rat_pelt", "name": "Rat Pelt", "chance": 1.0},
+    "Forest Wolf": {"item_id": "itm_wolf_pelt", "name": "Wolf Pelt", "chance": 0.6},
+    "Cave Troll": {"item_id": "itm_troll_hide", "name": "Troll Hide", "chance": 0.8},
+    "Marsh Wraith": {"item_id": "itm_wraith_essence", "name": "Wraith Essence", "chance": 0.7},
+    "Ember Drake": {"item_id": "itm_drake_scale", "name": "Drake Scale", "chance": 1.0},
+    "Road Bandit": {"item_id": "itm_bandit_dagger", "name": "Bandit Dagger", "chance": 0.5, "bonus": 2},
+}
+
+
+def roll_drop(monster_name):
+    """Return the drop dict or None. Uses module random (seed it in tests)."""
+    import random
+    spec = MONSTER_DROPS.get(monster_name)
+    if not spec:
+        return None
+    if random.random() < spec.get("chance", 0):
+        return {"item_id": spec["item_id"], "name": spec["name"],
+                "qty": 1, "equipped": False, **({"bonus": spec["bonus"]} if "bonus" in spec else {})}
+    return None
+
+
+def seed_monsters(db):
+    # Backfill-safe: inserts any spawn ids missing from this DB (so live
+    # worlds gain new monsters on reboot) while respecting the per-location cap.
+    existing = {m.id for m in db.query(Monster.id).all()}
+    per_loc = {}
+    for m in db.query(Monster.location).all():
+        per_loc[m.location] = per_loc.get(m.location, 0) + 1
+    for m in MONSTER_SPAWNS:
+        if m["id"] in existing:
+            continue
+        per_loc[m["location"]] = per_loc.get(m["location"], 0) + 1
+        if per_loc[m["location"]] > MAX_MONSTERS_PER_LOCATION:
+            per_loc[m["location"]] -= 1
+            continue  # respect the per-location cap
+        db.add(Monster(id=m["id"], name=m["name"], location=m["location"],
+                       hp=m["hp"], max_hp=m["hp"],
+                       xp_reward=m["xp_reward"], gold_reward=m["gold_reward"], alive=True))
+    db.commit()
+
+
+GROUND_LOOT = [
+    {"item_id": "itm_healing_potion", "name": "Healing Potion", "location": "riverside_village", "qty": 1, "heal": 12},
+    {"item_id": "itm_wolf_pelt", "name": "Wolf Pelt", "location": "oakhollow_forest", "qty": 1},
+    {"item_id": "itm_healing_potion", "name": "Healing Potion", "location": "oakhollow_forest", "qty": 1, "heal": 12},
+    {"item_id": "itm_iron_sword", "name": "Iron Sword", "location": "deep_cave", "qty": 1, "bonus": 3},
+    {"item_id": "itm_wraith_essence", "name": "Wraith Essence", "location": "sunken_marsh", "qty": 1},
+    {"item_id": "itm_healing_potion", "name": "Healing Potion", "location": "capital_city", "qty": 1, "heal": 12},
+]
+
+
+def seed_ground(db):
+    from .models import GroundItem
+    if db.query(GroundItem).count() > 0:
+        return
+    for g in GROUND_LOOT:
+        db.add(GroundItem(item_id=g["item_id"], name=g["name"],
+                          location=g["location"], qty=g["qty"]))
+    db.commit()
+
+
+def ground_item_props(item_id):
+    """Full item props (heal/bonus) for a ground item_id, so pick_up keeps them."""
+    for g in GROUND_LOOT:
+        if g["item_id"] == item_id:
+            return {k: v for k, v in g.items() if k not in ("location",)}
+    for spec in MONSTER_DROPS.values():
+        if spec["item_id"] == item_id:
+            return {"item_id": spec["item_id"], "name": spec["name"], "qty": 1,
+                    **({"bonus": spec["bonus"]} if "bonus" in spec else {})}
+    return None
+
+
+def exits_from(loc_id):
+    out = []
+    for e in EDGES:
+        if e["from"] == loc_id:
+            out.append({"to": e["to"], "direction": e["direction"]})
+        elif e["to"] == loc_id:
+            out.append({"to": e["from"], "direction": "back"})
+    return out
+
+
+def loc_by_id(loc_id):
+    return next((l for l in LOCATIONS if l["id"] == loc_id), None)
+
+
+def monster_haunts(monster_name):
+    """Location names where a monster type spawns, e.g. ['Oakhollow Forest']."""
+    seen, out = set(), []
+    for m in MONSTER_SPAWNS:
+        if m["name"] == monster_name and m["location"] not in seen:
+            seen.add(m["location"])
+            loc = loc_by_id(m["location"])
+            out.append(loc["name"] if loc else m["location"])
+    return out
+
+
+def danger_of(location_id):
+    """Static danger rating from the strongest thing that spawns there."""
+    strongest = max((m["hp"] for m in MONSTER_SPAWNS if m["location"] == location_id), default=0)
+    if strongest >= 30:
+        return "deadly"
+    if strongest >= 15:
+        return "dangerous"
+    if strongest > 0:
+        return "mild"
+    return "safe"
+
+
+def quests_at(location_id):
+    """Quest offers available from NPCs at this location, with full terms."""
+    out = []
+    for qid, q in QUESTS.items():
+        giver = next((n for n in NPCS if n["npc_id"] == q["giver"] and n["location"] == location_id), None)
+        if giver:
+            out.append({"quest_id": qid, "title": q["title"], "target": q["target"],
+                        "count": q["count"], "xp": q["xp"], "gold": q["gold"],
+                        "min_level": q.get("min_level", 1),
+                        "giver": giver["name"], "brief": quest_brief(qid)})
+    return out
+
+
+def quest_brief(quest_id):
+    """One-line explicit briefing: requirement, monster name, count, where, reward."""
+    spec = QUESTS.get(quest_id)
+    if not spec:
+        return ""
+    where = ", ".join(monster_haunts(spec["target"])) or "unknown lands"
+    req = f"Requires level {spec.get('min_level', 1)}. "
+    return (f"{req}Slay {spec['count']} {spec['target']} "
+            f"(found in {where}); reward: +{spec['xp']} XP, +{spec['gold']} gold.")
