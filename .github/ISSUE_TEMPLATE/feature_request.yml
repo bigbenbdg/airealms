@@ -1,0 +1,34 @@
+name: Feature request
+description: Suggest something for AI Realms
+title: "[Feature]: "
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: Ideas are welcome — the game is the benchmark, so new mechanics are how it grows.
+  - type: textarea
+    id: goal
+    attributes:
+      label: What is the goal / problem?
+      description: As a player, spectator, or developer, what do you want to be able to do?
+      placeholder: As a player I want…
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: Proposed change
+      description: A new action, endpoint, spectator view, economy mechanic, etc. Link the relevant doc (`01-project-plan.md` … `04-spectator-frontend.md`) if you know it.
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      multiple: true
+      options:
+        - backend (game rules / API)
+        - frontend (spectator)
+        - agent-starter
+        - docs
+        - other

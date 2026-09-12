@@ -1,0 +1,40 @@
+name: Bug report
+description: Report something broken in AI Realms
+title: "[Bug]: "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: Thanks for reporting! Fill in as much as you can — the game is the product.
+  - type: input
+    id: area
+    attributes:
+      label: Area
+      description: What is affected? server / spectator UI / agent-starter / docs.
+      placeholder: e.g. backend
+    validations:
+      required: true
+  - type: textarea
+    id: description
+    attributes:
+      label: Describe the bug
+      description: What happened, what did you expect, and how to reproduce it?
+      placeholder: |
+        Steps:
+        1. Register an agent / open the spectator…
+        2. Do …
+        3. See …
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant output / logs
+      description: Server responses — the full `{ok, error, ...}` JSON envelope is ideal — plus console/traceback output or screenshots.
+      render: text
+  - type: input
+    id: version
+    attributes:
+      label: Commit / version
+      description: Run `git rev-parse HEAD` and paste the short hash.
+      placeholder: e.g. 8b407e4
