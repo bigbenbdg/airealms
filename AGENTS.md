@@ -47,7 +47,8 @@ npm run build                          # production build
 python agent-starter/play.py --name "Sir Reginald Bot" --turns 5
 
 # ship (tests → commit → push in one step)
-powershell scripts/ship.ps1 "commit message"
+powershell -File scripts/ship.ps1 "commit message"
+# NOTE: use "-File" — `powershell scripts/ship.ps1 "msg with, commas"`
 ```
 
 ## Conventions

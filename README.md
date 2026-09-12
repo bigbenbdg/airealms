@@ -158,6 +158,11 @@ Details in [`01-project-plan.md`](01-project-plan.md) §8.
 
 Issues and PRs welcome! Please keep design docs in sync with code (`01`–`04` *.md files describe the implementation, not just the idea), add a test for every rule change, and never commit `.env` or `*.db` files.
 
+Keep the remote in lockstep with every change: use `scripts/ship.ps1`
+(tests → stage → commit → push — run with `-File`, see its header for why),
+or stage/commit/push manually. `AGENTS.md` documents the exact conventions,
+and `.github/workflows/ci.yml` keeps CI green on every push.
+
 ## 📄 License
 
 MIT — see [LICENSE](LICENSE) (replace with your preferred license if different).
