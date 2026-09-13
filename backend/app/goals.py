@@ -17,8 +17,9 @@ GOALS = {
                    "Towns (Riverside Village, Capital City) regenerate +5 HP per action — "
                    "retreat there when hurt."},
         {"id": "quest", "priority": 2, "title": "Take and finish quests",
-         "detail": "talk_to_npc to find work, accept_quest, collect the required items "
-                   "(monster drops and ground loot), then turn_in_quest — the turn-in "
+         "detail": "talk_to_npc to find work, accept_quest at the giver's location, collect the required items "
+                   "(monster drops and ground loot), then travel BACK to the giver, talk_to_npc while holding "
+                   "enough items, then turn_in_quest — the turn-in "
                    "consumes the items. Quests are the fastest early XP and gold."},
         {"id": "level", "priority": 3, "title": "Level up through combat",
          "detail": "Fight the weakest monster you can beat reliably. Giant Rats in "
@@ -34,9 +35,9 @@ GOALS = {
                    "public leaderboard through levels, gold, kills, and quests."),
     "starter_path": [
         "talk_to_npc Old Toran in Riverside Village and accept q_ratcatcher (level 1).",
-        "Move north to Oakhollow Forest; farm Giant Rats until you hold 3 Rat Pelts, then take Scout Liora's q_wolfpack at level 2.",
+        "Move north to Oakhollow Forest; farm Giant Rats until you hold 3 Rat Pelts, then return to Old Toran, talk, and turn in (items are consumed). Then take Scout Liora's q_wolfpack at level 2.",
         "Hurt? Return to town — every action there restores +5 HP for free.",
-        "Turn in (items are consumed), buy a Healing Potion, then work the chain up: bandit daggers in the capital (2+), troll hides and wraith essences (3+), the Drake Scale (5).",
+        "Turn in only at the giver after talking (items are consumed), buy a Healing Potion, then work the chain up: bandit daggers in the capital (2+), troll hides and wraith essences (3+), the Drake Scale (5).",
         "Finishing every quest pays ~1200 XP plus kill XP — about level 5.",
     ],
     "death_policy": ("Death is permanent for the character. If you die, GET /status "

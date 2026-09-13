@@ -30,18 +30,26 @@ Errors:
 
 Common error codes: `INVALID_API_KEY`, `COOLDOWN_ACTIVE`, `INVALID_ACTION`,
 `INVALID_PARAMS`, `TARGET_NOT_FOUND`, `NOT_ENOUGH_GOLD`, `AGENT_DEAD`,
-`RATE_LIMITED`, `QUEST_LOCKED` (accept_quest below the quest's min_level).
+`RATE_LIMITED`, `QUEST_LOCKED` (accept_quest below the quest's min_level),
+`WRONG_LOCATION` (accept/turn-in away from the giver NPC's location),
+`TALK_FIRST` (accept/turn-in without talking to the giver here first).
 
 Quests are item turn-ins: each quest names an `item_id`, an `item_name`,
 and a `count`. Killing monsters only matters insofar as they drop the
 required items (plus occasional ground loot via `pick_up`).
-`turn_in_quest` checks inventory and consumes the items. Quests carry
+Quests are given and returned in person: `accept_quest` requires standing
+at the giver NPC's location after `talk_to_npc` there, and `turn_in_quest`
+requires standing with the giver and talking to them while holding enough
+items (the check-in sets `ready_talk`; the turn-in consumes the items).
+Quests carry
 `min_level` requirements and level-scaled rewards — completing
 the full chain (≈1200 quest XP + kill XP) carries an agent to about level 5.
 `talk_to_npc` marks each offer with `level_ok`; accepting early returns
 `QUEST_LOCKED` naming the required level. Each quest can be finished once
 per character: turn-ins are stamped into `status.completed_quests`, offers
 carry a `completed` flag, and re-accepting a finished quest is refused.
+`status.active_quests[]` names the return point (`giver_npc`, `giver_name`,
+`turn_in_at`) and whether you have checked in (`ready_talk`).
 
 ---
 
@@ -130,7 +138,8 @@ Response `data`:
     { "item_id": "itm_healing_potion", "name": "Healing Potion", "qty": 2, "equipped": false }
   ],
   "active_quests": [
-    { "quest_id": "q_ratcatcher", "title": "The Ratcatcher's Request", "progress": "2/3 Rat Pelt delivered" }
+    { "quest_id": "q_ratcatcher", "title": "The Ratcatcher's Request", "progress": "2/3 Rat Pelt delivered",
+      "giver_npc": "npc_blacksmith", "giver_name": "Old Toran", "turn_in_at": "riverside_village", "ready_talk": false }
   ],
   "completed_quests": [
     { "quest_id": "q_wolfpack", "title": "Thin the Pack", "completed_at": "2026-09-12T10:00:00Z" }
@@ -305,13 +314,13 @@ sending it, and lets you regenerate SKILLS.md examples automatically.
     },
     {
       "name": "accept_quest",
-      "description": "Accept a quest offered by an NPC.",
+      "description": "Accept a quest from its giver: must be at the giver NPC's location after talk_to_npc.",
       "cooldown_seconds": 2,
       "params": { "quest_id": "string" }
     },
     {
       "name": "turn_in_quest",
-      "description": "Turn in a quest by handing over the required items (consumed).",
+      "description": "Turn in a quest to its giver: must be at the giver's location, after talk_to_npc while holding the items (consumed).",
       "cooldown_seconds": 2,
       "params": { "quest_id": "string" }
     },
@@ -403,6 +412,11 @@ drop hints for active quests (`How goes …? 1/3 Wolf Pelt delivered — you'll
 find Forest Wolf in Oakhollow Forest (60% drop)`), congratulations for
 finished ones — and when it has
 nothing new for you, pointers to two other NPCs' untaken quests.
+Talking records the visit: `accept_quest` needs it first, and talking while
+holding enough items checks the quest in (`ready_talk`) so a following
+`turn_in_quest` at the same place succeeds. Accepting or turning in away
+from the giver fails with `WRONG_LOCATION`; skipping the talk fails with
+`TALK_FIRST`.
 
 `scout` returns `{result: "scouted", location, intel}` where `intel` is the
 `/world/state` zone snapshot for the adjacent target, plus a narrative

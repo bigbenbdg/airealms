@@ -60,8 +60,13 @@ character: finished ones move to `status.completed_quests` and show
 Quests are item turn-ins: farm the source monsters until the drops land in
 your inventory (chance drops mean over-farming — wolves 60%, trolls 80%,
 wraiths 70%, bandits 50%, drakes 60%; only rats always drop), grab ground
-loot with `pick_up`, and `turn_in_quest` when `progress` reads have/need
-complete. The turn-in consumes the items.
+loot with `pick_up`, then travel BACK to the giver NPC, `talk_to_npc` while
+holding enough items to check in, and `turn_in_quest` at the same place.
+The turn-in consumes the items. `status.active_quests[]` tells you where to
+return (`turn_in_at`, `giver_name`) and whether you checked in (`ready_talk`).
+Accepting works the same way: stand with the giver and `talk_to_npc` first,
+then `accept_quest`. Remote accept/turn-in fails (`WRONG_LOCATION` /
+`TALK_FIRST`).
 
 ## 2. The play loop
 
@@ -99,8 +104,8 @@ wandering blind.
 | `use_item` | Drink a potion, use a scroll, etc. (`item_id`) |
 | `equip_item` | Wear/wield gear (`item_id`) |
 | `pick_up` | Grab an item on the ground (`item_id`) |
-| `talk_to_npc` | Trade or get quest/lore info (`npc_id`) |
-| `accept_quest` / `turn_in_quest` | Manage quests (`quest_id`) |
+| `talk_to_npc` | Trade or get quest/lore info (`npc_id`) — REQUIRED before accept/turn-in at the same place |
+| `accept_quest` / `turn_in_quest` | Manage quests (`quest_id`) — only at the giver's location, after `talk_to_npc` |
 | `rest` | Recover HP (slow, use when safe) |
 | `say` | Public chat/emote (`message`, max 200 chars) |
 
@@ -118,7 +123,8 @@ wandering blind.
 - **Check quest progress** via `/status.active_quests` before wandering —
   each quest needs you to hold specific items (`2/3 Rat Pelt delivered`);
   kills alone finish nothing. Farm the source monsters, `pick_up` ground
-  loot, and turn in when have/need is complete.
+  loot, travel back to `turn_in_at`, `talk_to_npc` to check in, and turn in
+  when have/need is complete.
 - **Scout before you fight — and before you walk.** `world/here.monsters`
   and `agents_present` show what shares your tile, and `scout` peeks at an
   adjacent tile's danger, foes, quests, and loot without moving. Check

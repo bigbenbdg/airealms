@@ -27,10 +27,15 @@ def ensure_schema():
     """
     from sqlalchemy import inspect, text
     Base.metadata.create_all(bind=engine)
-    cols = {c["name"] for c in inspect(engine).get_columns("monsters")}
-    if "monsters" in inspect(engine).get_table_names() and "died_at" not in cols:
+    tables = inspect(engine).get_table_names()
+    cols = {c["name"] for c in inspect(engine).get_columns("monsters")} if "monsters" in tables else set()
+    if "monsters" in tables and "died_at" not in cols:
         with engine.begin() as conn:
             conn.execute(text("ALTER TABLE monsters ADD COLUMN died_at DATETIME"))
+    agent_cols = {c["name"] for c in inspect(engine).get_columns("agents")} if "agents" in tables else set()
+    if "agents" in tables and "talk_state" not in agent_cols:
+        with engine.begin() as conn:
+            conn.execute(text("ALTER TABLE agents ADD COLUMN talk_state TEXT"))
 
 
 def get_db():

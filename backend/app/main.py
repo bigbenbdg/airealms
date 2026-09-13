@@ -109,6 +109,72 @@ def _quest_hint(spec: dict) -> str:
     return f"{source} in {where}{odds}"
 
 
+def _giver_npc(quest_id: str):
+    """The NPC dict that gives quest_id, or None."""
+    spec = QUESTS.get(quest_id)
+    if not spec:
+        return None
+    return next((n for n in NPCS if n["npc_id"] == spec["giver"]), None)
+
+
+def _giver_place_name(quest_id: str) -> str:
+    npc = _giver_npc(quest_id)
+    if not npc:
+        return "somewhere"
+    loc = loc_by_id(npc["location"])
+    return loc["name"] if loc else npc["location"]
+
+
+def _talk_map(agent) -> dict:
+    """Per-NPC talk memory: {npc_id: {location, at}}. Tolerant of legacy shape."""
+    try:
+        raw = load_json(getattr(agent, "talk_state", None) or "{}", {})
+    except Exception:
+        return {}
+    if not isinstance(raw, dict):
+        return {}
+    # legacy single-talk shape {"npc_id":..., "location":..., "at":...}
+    if "npc_id" in raw and isinstance(raw.get("npc_id"), str):
+        nid = raw["npc_id"]
+        return {nid: {"location": raw.get("location", ""), "at": raw.get("at", "")}}
+    out = {}
+    for k, v in raw.items():
+        if isinstance(v, dict):
+            out[k] = {"location": v.get("location", ""), "at": v.get("at", "")}
+    return out
+
+
+def _save_talk_map(agent, talk: dict):
+    try:
+        agent.talk_state = json.dumps(talk)
+    except Exception:
+        pass
+
+
+def _talked_here(agent, npc_id: str) -> bool:
+    talk = _talk_map(agent)
+    entry = talk.get(npc_id)
+    return bool(entry) and entry.get("location") == agent.location
+
+
+def _require_giver_presence(agent, quest_id: str, purpose: str):
+    """Enforce return-to-giver: must stand where the giver NPC is and have
+    talked to them there. Raises WRONG_LOCATION / TALK_FIRST."""
+    spec = QUESTS.get(quest_id)
+    npc = _giver_npc(quest_id)
+    if not spec or not npc:
+        return
+    place = _giver_place_name(quest_id)
+    if agent.location != npc["location"]:
+        err("WRONG_LOCATION",
+            f"'{spec['title']}' {purpose} must happen at {place}: "
+            f"find {npc['name']} ({npc['npc_id']}) there and talk_to_npc first.")
+    if not _talked_here(agent, npc["npc_id"]):
+        err("TALK_FIRST",
+            f"Talk to {npc['name']} ({npc['npc_id']}) here first "
+            f"(talk_to_npc), then {purpose}.")
+
+
 def agent_public(a: Agent):
     return {"agent_id": a.id, "name": a.name, "bio": a.bio, "level": a.level,
             "hp": a.hp, "max_hp": a.max_hp,
@@ -191,7 +257,11 @@ def status(agent: Agent = Depends(get_agent), db: Session = Depends(get_db)):
         "stats": load_json(agent.stats, {}), "gold": agent.gold, "location": agent.location,
         "status_effects": [], "inventory": inv,
         "active_quests": [{"quest_id": q["quest_id"], "title": q["title"],
-                           "progress": _quest_progress(inv, QUESTS[q["quest_id"]])}
+                           "progress": _quest_progress(inv, QUESTS[q["quest_id"]]),
+                           "giver_npc": QUESTS[q["quest_id"]].get("giver"),
+                           "giver_name": (_giver_npc(q["quest_id"]) or {}).get("name", ""),
+                           "turn_in_at": ((_giver_npc(q["quest_id"]) or {}).get("location", "")),
+                           "ready_talk": bool(q.get("ready_talk"))}
                           for q in quests if not q.get("done") and q["quest_id"] in QUESTS],
         "completed_quests": [{"quest_id": q["quest_id"], "title": q["title"],
                               "completed_at": q.get("completed_at")}
@@ -536,6 +606,26 @@ def _apply_action(db, agent, action, params):
                     break
             if tips:
                 lines.append("For more work: " + " ".join(tips) + ". ")
+        # Remember this visit: accepting and turning in quests requires
+        # standing with the giver and having talked to them here. Talking
+        # while holding enough items "checks in" the quest for turn-in.
+        talk = _talk_map(agent)
+        talk[nid] = {"location": agent.location, "at": now_iso()}
+        _save_talk_map(agent, talk)
+        checked_in = []
+        for q in quests:
+            spec = QUESTS.get(q.get("quest_id", ""))
+            if not spec or spec.get("giver") != nid or q.get("done"):
+                continue
+            if _quest_have(inv, spec) >= spec["count"] and not q.get("ready_talk"):
+                q["ready_talk"] = True
+                checked_in.append(q["quest_id"])
+        if checked_in:
+            save_quests()
+            for qid in checked_in:
+                spec = QUESTS[qid]
+                lines.append(f"You show the {spec['item_name']} — {npc['name']} nods. "
+                             f"Use turn_in_quest [{qid}] to hand them over. ")
         narrative = f"{npc['name']} says: \"{npc['dialogue']}\" " + "".join(lines).strip()
         return {"npc": npc["name"], "dialogue": npc["dialogue"], "shop": shop,
                 "quests_offered": offers}, narrative
@@ -555,6 +645,7 @@ def _apply_action(db, agent, action, params):
         if agent.level < need:
             err("QUEST_LOCKED", f"'{spec['title']}' requires level {need} (you are level {agent.level}). "
                                 f"Level up first — try easier quests or grind weaker monsters.", status=403)
+        _require_giver_presence(agent, qid, "acceptance")
         quests.append({"quest_id": qid, "title": spec["title"], "done": False})
         save_quests()
         return {"result": "quest_accepted", "quest_id": qid}, \
@@ -568,11 +659,18 @@ def _apply_action(db, agent, action, params):
             err("TARGET_NOT_FOUND", f"Unknown quest '{qid}'.")
         if q.get("done"):
             err("INVALID_PARAMS", "Quest already turned in.")
+        _require_giver_presence(agent, qid, "turn-in")
         have = _quest_have(inv, spec)
         if have < spec["count"]:
             err("INVALID_PARAMS",
                 f"Quest incomplete: need {spec['count']}x {spec['item_name']}, "
                 f"you hold {have}. {_quest_hint(spec)} drop them.")
+        if not q.get("ready_talk"):
+            npc = _giver_npc(qid)
+            who = f"{npc['name']} ({npc['npc_id']})" if npc else "the quest giver"
+            err("TALK_FIRST",
+                f"You hold the goods — check in with {who} here first "
+                f"(talk_to_npc), then turn_in_quest.")
         # Consume the required items: unequipped copies first, then equipped
         # (matters for e.g. the Bandit Dagger, which is equippable gear).
         need = spec["count"]

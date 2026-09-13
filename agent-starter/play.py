@@ -104,20 +104,50 @@ def decide(status, here, schema, offered=None, accepted=None):
             return ("use_item", {"item_id": "itm_healing_potion"})
         return ("rest", {})
     # take an offered, unlocked, uncompleted quest we haven't accepted yet
+    # (offered comes from talk_to_npc results at this location, so the
+    # talk-first + location rules for accept_quest are already satisfied)
     for q in offered:
         qid = q["quest_id"] if isinstance(q, dict) else q
         ok = q.get("level_ok", True) if isinstance(q, dict) else True
         done = q.get("completed", False) if isinstance(q, dict) else False
         if qid not in accepted and ok and not done:
             return ("accept_quest", {"quest_id": qid})
-    # turn in any finished collection quest (progress "have/need", e.g. "3/3 Rat Pelt delivered")
+    # finished collection quests must be returned IN PERSON: travel back to
+    # turn_in_at, talk_to_npc while holding the items to check in, then turn in
+    here_npcs = {n["npc_id"] for n in world.get("npcs", [])}
     for q in (me.get("active_quests") or []):
         prog = q.get("progress", "") if isinstance(q, dict) else ""
         try:
             have_s, rest = prog.split("/", 1)
             need_s = rest.split(None, 1)[0]
-            if int(have_s) >= int(need_s):
-                return ("turn_in_quest", {"quest_id": q["quest_id"]})
+            complete = int(have_s) >= int(need_s)
+        except (ValueError, IndexError, KeyError, AttributeError):
+            continue
+        if not complete:
+            continue
+        qid = q.get("quest_id")
+        home = q.get("turn_in_at", "")
+        giver = q.get("giver_npc", "")
+        if home and me.get("location") != home:
+            continue  # handled below: walk back toward the giver
+        if giver and giver in here_npcs:
+            if q.get("ready_talk"):
+                return ("turn_in_quest", {"quest_id": qid})
+            return ("talk_to_npc", {"npc_id": giver})
+        if q.get("ready_talk"):
+            return ("turn_in_quest", {"quest_id": qid})
+        # at the right place but giver id unknown: talk to someone
+        if world.get("npcs"):
+            return ("talk_to_npc", {"npc_id": world["npcs"][0]["npc_id"]})
+    # holding a complete quest but standing elsewhere: head back
+    for q in (me.get("active_quests") or []):
+        prog = q.get("progress", "") if isinstance(q, dict) else ""
+        try:
+            have_s, rest = prog.split("/", 1)
+            need_s = rest.split(None, 1)[0]
+            if int(have_s) >= int(need_s) and q.get("turn_in_at") and q.get("turn_in_at") != me.get("location"):
+                if world["exits"]:
+                    return ("move", {"to": world["exits"][0]["to"]})
         except (ValueError, IndexError, KeyError, AttributeError):
             pass
     if world["monsters"]:
@@ -149,10 +179,13 @@ your LAST ACTION (which may offer quests/shop — use their IDs!), and the actio
 Reply with EXACTLY one JSON object and nothing else — no thinking, no markdown, no \
 commentary: {"action": "<name>", "params": {...}, "reason": "<one short sentence>"}.
  How to make progress:
- - If LAST ACTION shows quests_offered, ACCEPT one with accept_quest (quest_id you saw).
- - If you have active_quests naming items, collect them: ATTACK monsters that drop them \
- (drops land in your inventory automatically) and PICK UP ground loot; then turn_in_quest \
- when progress reads have/need complete (turn-in consumes the items).
+  - If LAST ACTION shows quests_offered, ACCEPT one with accept_quest (quest_id you saw) — \
+ you are already at the giver, so the location+talk rule is satisfied.
+  - If you have active_quests naming items, collect them: ATTACK monsters that drop them \
+ (drops land in your inventory automatically) and PICK UP ground loot; then travel BACK to \
+ the quest's turn_in_at location, TALK to the giver npc (talk_to_npc) while holding enough \
+ items to check in, and only then turn_in_quest when progress reads have/need complete \
+ (turn-in consumes the items). Remote turn-ins fail — go home first.
  - COMBAT FIRST: if any monsters are present at your location and your HP is above 30%, \
  ATTACK the weakest one (prefer monsters that drop your quest items). Never walk away from a winnable \
 fight, and never retreat to town at full HP.

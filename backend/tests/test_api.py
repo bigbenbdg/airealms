@@ -370,6 +370,9 @@ def test_quest_min_level_gate_and_chain():
     r2 = c.post("/api/v1/actions", json={"action": "accept_quest", "params": {"quest_id": "q_drakescale"}}, headers=h)
     assert r2.json()["detail"]["error"]["code"] == "QUEST_LOCKED"
     # unlocked quest accepts and brief states requirement + target
+    # (accept is in person: talk to the giver here first)
+    _set_hp_and_ready(reg["agent_id"], 25)
+    assert c.post("/api/v1/actions", json={"action": "talk_to_npc", "params": {"npc_id": "npc_blacksmith"}}, headers=h).status_code == 200
     _set_hp_and_ready(reg["agent_id"], 25)
     ok = c.post("/api/v1/actions", json={"action": "accept_quest", "params": {"quest_id": "q_ratcatcher"}}, headers=h)
     assert ok.status_code == 200, ok.text
@@ -468,8 +471,13 @@ def test_completed_quest_flagged_and_not_repeatable():
     c = fresh_client()
     reg = register(c, "Finisher")
     h = {"Authorization": f"Bearer {reg['api_key']}"}
+    # accept is in person: talk to Old Toran at Riverside first
+    _talk(c, h, reg["agent_id"], "npc_blacksmith")
+    _set_hp_and_ready(reg["agent_id"], 25)
     assert c.post("/api/v1/actions", json={"action": "accept_quest", "params": {"quest_id": "q_ratcatcher"}}, headers=h).status_code == 200
     _give_quest_items(reg["agent_id"], "itm_rat_pelt", 3, "Rat Pelt")
+    # turn-in is in person after a check-in talk while holding the items
+    _talk(c, h, reg["agent_id"], "npc_blacksmith")
     _set_hp_and_ready(reg["agent_id"], 25)
     done = c.post("/api/v1/actions", json={"action": "turn_in_quest", "params": {"quest_id": "q_ratcatcher"}}, headers=h)
     assert done.status_code == 200, done.text
@@ -544,8 +552,10 @@ def test_npc_notices_quest_state_and_suggests_other_work():
     assert "How goes" in t2["narrative"] and "Oakhollow Forest" in t2["narrative"]
     assert "Rat Pelt" in t2["narrative"]
     assert t2["data"]["quests_offered"][0]["status"] == "in_progress"
-    # completed: congratulated and pointed at other NPCs' work
+    # completed: check in with the goods, then hand them over
     _give_quest_items(reg["agent_id"], "itm_rat_pelt", 3, "Rat Pelt")
+    t_check = _talk(c, h, reg["agent_id"], "npc_blacksmith")
+    assert "turn_in_quest" in t_check["narrative"]
     _set_hp_and_ready(reg["agent_id"], 25)
     assert c.post("/api/v1/actions", json={"action": "turn_in_quest", "params": {"quest_id": "q_ratcatcher"}}, headers=h).status_code == 200
     t3 = _talk(c, h, reg["agent_id"], "npc_blacksmith")
@@ -558,6 +568,8 @@ def test_turn_in_without_items_fails_and_names_need():
     c = fresh_client()
     reg = register(c, "EmptyHanded")
     h = {"Authorization": f"Bearer {reg['api_key']}"}
+    _talk(c, h, reg["agent_id"], "npc_blacksmith")
+    _set_hp_and_ready(reg["agent_id"], 25)
     assert c.post("/api/v1/actions", json={"action": "accept_quest", "params": {"quest_id": "q_ratcatcher"}}, headers=h).status_code == 200
     _set_hp_and_ready(reg["agent_id"], 25)
     # no pelts held: turn-in refused, naming have/need and the source
@@ -582,6 +594,8 @@ def test_kills_alone_do_not_complete_item_quest():
     c = fresh_client()
     reg = register(c, "Grinder")
     h = {"Authorization": f"Bearer {reg['api_key']}"}
+    _talk(c, h, reg["agent_id"], "npc_blacksmith")
+    _set_hp_and_ready(reg["agent_id"], 25)
     assert c.post("/api/v1/actions", json={"action": "accept_quest", "params": {"quest_id": "q_ratcatcher"}}, headers=h).status_code == 200
     # simulate stored legacy kill-count fields: server must ignore them
     db = SessionLocal()
@@ -596,3 +610,58 @@ def test_kills_alone_do_not_complete_item_quest():
     assert bad.json()["detail"]["error"]["code"] == "INVALID_PARAMS"
     st = c.get("/api/v1/status", headers=h).json()["data"]
     assert st["active_quests"][0]["progress"] == "0/3 Rat Pelt delivered"
+
+
+def _move(c, h, agent_id, to):
+    _set_hp_and_ready(agent_id, 25)
+    r = c.post("/api/v1/actions", json={"action": "move", "params": {"to": to}}, headers=h)
+    assert r.status_code == 200, r.text
+    return r.json()
+
+
+def test_accept_requires_talk_at_giver():
+    c = fresh_client()
+    reg = register(c, "Eager")
+    h = {"Authorization": f"Bearer {reg['api_key']}"}
+    # no talk yet: refused even though we stand in the right place
+    _set_hp_and_ready(reg["agent_id"], 25)
+    no_talk = c.post("/api/v1/actions", json={"action": "accept_quest", "params": {"quest_id": "q_ratcatcher"}}, headers=h)
+    assert no_talk.json()["detail"]["error"]["code"] == "TALK_FIRST"
+    # talk, then accept works
+    _talk(c, h, reg["agent_id"], "npc_blacksmith")
+    _set_hp_and_ready(reg["agent_id"], 25)
+    assert c.post("/api/v1/actions", json={"action": "accept_quest", "params": {"quest_id": "q_ratcatcher"}}, headers=h).status_code == 200
+    # status advertises where to return
+    st = c.get("/api/v1/status", headers=h).json()["data"]
+    q = st["active_quests"][0]
+    assert q["turn_in_at"] == "riverside_village" and q["giver_npc"] == "npc_blacksmith"
+    assert q["ready_talk"] is False
+
+
+def test_turn_in_requires_return_and_checkin_talk():
+    c = fresh_client()
+    reg = register(c, "Homesick")
+    h = {"Authorization": f"Bearer {reg['api_key']}"}
+    _talk(c, h, reg["agent_id"], "npc_blacksmith")
+    _set_hp_and_ready(reg["agent_id"], 25)
+    assert c.post("/api/v1/actions", json={"action": "accept_quest", "params": {"quest_id": "q_ratcatcher"}}, headers=h).status_code == 200
+    _give_quest_items(reg["agent_id"], "itm_rat_pelt", 3, "Rat Pelt")
+    # leave home: remote turn-in is refused with the way back
+    _move(c, h, reg["agent_id"], "oakhollow_forest")
+    _set_hp_and_ready(reg["agent_id"], 25)
+    away = c.post("/api/v1/actions", json={"action": "turn_in_quest", "params": {"quest_id": "q_ratcatcher"}}, headers=h)
+    assert away.json()["detail"]["error"]["code"] == "WRONG_LOCATION"
+    assert "Riverside Village" in away.json()["detail"]["error"]["message"]
+    # back home but no check-in talk since gathering the pelts: refused
+    _move(c, h, reg["agent_id"], "riverside_village")
+    _set_hp_and_ready(reg["agent_id"], 25)
+    cold = c.post("/api/v1/actions", json={"action": "turn_in_quest", "params": {"quest_id": "q_ratcatcher"}}, headers=h)
+    assert cold.json()["detail"]["error"]["code"] == "TALK_FIRST"
+    # talk while holding the goods checks in, then turn-in succeeds
+    t = _talk(c, h, reg["agent_id"], "npc_blacksmith")
+    assert "turn_in_quest" in t["narrative"]
+    assert c.get("/api/v1/status", headers=h).json()["data"]["active_quests"][0]["ready_talk"] is True
+    _set_hp_and_ready(reg["agent_id"], 25)
+    done = c.post("/api/v1/actions", json={"action": "turn_in_quest", "params": {"quest_id": "q_ratcatcher"}}, headers=h)
+    assert done.status_code == 200, done.text
+    assert done.json()["data"]["result"] == "quest_turned_in"
