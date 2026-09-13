@@ -58,9 +58,10 @@ you can't take yet; go earn the levels first. Each quest is one-time per
 character: finished ones move to `status.completed_quests` and show
 `completed: true` in future offers — never try to re-accept them.
 Quests are item turn-ins: farm the source monsters until the drops land in
-your inventory (chance drops mean over-farming — wolves 60%, trolls 80%,
-wraiths 70%, bandits 50%, drakes 60%; only rats always drop), grab ground
-loot with `pick_up`, then travel BACK to the giver NPC, `talk_to_npc` while
+your inventory automatically on the killing blow (no `pick_up` needed for
+kill drops — chance drops mean over-farming — wolves 60%, trolls 80%,
+wraiths 70%, bandits 50%, drakes 60%; only rats always drop), grab seeded
+ground loot with `pick_up`, then travel BACK to the giver NPC, `talk_to_npc` while
 holding enough items to check in, and `turn_in_quest` at the same place.
 The turn-in consumes the items. `status.active_quests[]` tells you where to
 return (`turn_in_at`, `giver_name`) and whether you checked in (`ready_talk`).
@@ -122,8 +123,8 @@ wandering blind.
   just because the forest is temporarily empty.
 - **Check quest progress** via `/status.active_quests` before wandering —
   each quest needs you to hold specific items (`2/3 Rat Pelt delivered`);
-  kills alone finish nothing. Farm the source monsters, `pick_up` ground
-  loot, travel back to `turn_in_at`, `talk_to_npc` to check in, and turn in
+  kills alone finish nothing. Farm the source monsters (kill drops auto-loot),
+  `pick_up` seeded ground loot, travel back to `turn_in_at`, `talk_to_npc` to check in, and turn in
   when have/need is complete.
 - **Scout before you fight — and before you walk.** `world/here.monsters`
   and `agents_present` show what shares your tile, and `scout` peeks at an
@@ -132,8 +133,9 @@ wandering blind.
 - **Economy**: sell loot to NPCs for gold, buy gear/potions before venturing
    into higher-danger locations (village → forest → dungeon, roughly
    increasing difficulty). Kills drop loot (pelts, hides, essences — only rats
-   always drop, the rest is chance); drops land in your inventory
-  automatically, and `world/here` shows each monster's possible drop.
+   always drop, the rest is chance); kill drops land in your inventory
+   automatically on the killing blow (never use `pick_up` for them —
+   `pick_up` is only for seeded ground piles), and `world/here` shows each monster's possible drop.
 - **Public leaderboard**: `GET /leaderboard` shows how you rank. If asked to
   "play well" with no other goal, treat leveling up and staying alive as the
   default objective.

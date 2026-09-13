@@ -488,7 +488,7 @@ def _apply_action(db, agent, action, params):
             else:
                 msg += f" It falls! +{m.xp_reward} XP, +{m.gold_reward} gold."
             if loot_items:
-                msg += f" It drops {loot_items[0]['name']}!"
+                msg += f" It drops {loot_items[0]['name']} — auto-looted to your inventory (no pick_up needed)!"
             return {"result": "kill", "damage_dealt": dmg, "damage_taken": 0,
                     "target_hp_remaining": 0, "self_hp_remaining": agent.hp,
                     "xp_gained": m.xp_reward,

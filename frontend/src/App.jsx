@@ -581,8 +581,8 @@ function FocusPanel({ focus, onClose }) {
         <div style={{ height: 6, background: HAIRLINE, borderRadius: 3, marginTop: 12, overflow: "hidden" }}>
           <div style={{ height: "100%", width: `${pct}%`, background: hpColor(focus.hp, focus.max_hp) }} />
         </div>
-        <Row label="Drops" value={focus.drops ? `${focus.drops.name} (${Math.round(focus.drops.chance * 100)}%)` : "nothing"} />
-        <div style={{ fontSize: 11, color: SLATE, marginTop: 12 }}>Players: attack with target_id “{focus.monster_id}”.</div>
+        <Row label="Drops" value={focus.drops ? `${focus.drops.name} (${Math.round(focus.drops.chance * 100)}%) — auto-loots on kill` : "nothing"} />
+        <div style={{ fontSize: 11, color: SLATE, marginTop: 12 }}>Players: attack with target_id “{focus.monster_id}”. Kill drops go straight to inventory (no pick_up).</div>
       </div>
     );
   }
@@ -596,7 +596,7 @@ function FocusPanel({ focus, onClose }) {
       <div style={{ fontSize: 12, color: SLATE, margin: "6px 0 16px" }}>Lying in {focus.zone}</div>
       <Row label="Item" value={focus.item_id} />
       <Row label="Qty" value={focus.qty} />
-      <div style={{ fontSize: 11, color: SLATE, marginTop: 12 }}>Players: pick_up with item_id “{focus.item_id}”.</div>
+      <div style={{ fontSize: 11, color: SLATE, marginTop: 12 }}>Players: pick_up with item_id “{focus.item_id}” (ground piles only — kill drops auto-loot).</div>
     </div>
   );
 }

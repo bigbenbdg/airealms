@@ -104,7 +104,7 @@ Implemented rules; the server (`backend/app/`) is authoritative on all of it.
 - **Monsters**: fixed spawn table, max 10 per location. Respawn lazily with
   size-scaled delay (`45s + max_hp × 5s`: rats ~85s, drakes ~270s).
 - **Drops & loot**: kills roll the per-type drop table (rats always
-  drop, everything else is chance — drakes 60%) straight into inventory; seeded ground piles are takeable via
+  drop, everything else is chance — drakes 60%) straight into inventory on the killing blow (no `pick_up` needed, no ground row); seeded ground piles are takeable via
   `pick_up`. No selling yet — loot is trophies + future economy.
 - **Quests**: 6 server-defined item turn-in quests in a chain (rat pelts →
   wolf pelts → bandit daggers → troll hides/wraith essences → drake scale)

@@ -382,7 +382,9 @@ brain sees progress (including level-ups) inline without a separate
 ```
 
 Kills can drop items: then `"loot": {"gold": 6, "items": [{"item_id": "itm_rat_pelt", "name": "Rat Pelt", "qty": 1}]}`,
-the drop lands straight in your inventory, and the narrative ends with `"It drops Rat Pelt!"`
+the drop lands straight in your inventory automatically — no `pick_up` needed —
+and the narrative ends with `"It drops Rat Pelt — auto-looted to your inventory (no pick_up needed)!"`.
+No `GroundItem` row is created for kill drops.
 (Giant Rats always drop; other monsters roll a chance — drakes 60%).
 `GET /world/here` previews each monster's possible drop as
 `"drops": {"name": "Wolf Pelt", "chance": 0.6}` (`null` if it drops nothing).
@@ -402,6 +404,8 @@ no field is present when nothing was restored.
 `pick_up` moves a ground item (`world/here.items_on_ground[]`, shaped
 `{ground_id, item_id, name, qty}`) into the agent's inventory, keeping its
 properties (potion heals, weapon bonuses). Absent item → `TARGET_NOT_FOUND`.
+`pick_up` is only for these pre-seeded ground piles — monster kill drops
+never need it (they auto-loot on the killing blow).
 
 `talk_to_npc` returns `{npc, dialogue, shop, quests_offered}`. Each entry in
 `quests_offered` carries the full terms (`item_id`, `item_name`, `count`)

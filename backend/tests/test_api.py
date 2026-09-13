@@ -223,12 +223,35 @@ def test_monster_drop_shown_on_kill_and_in_here():
             break
     assert out["data"]["result"] == "kill", "rat should die within 5 hits"
     assert "Rat Pelt" in out["narrative"]
+    assert "auto-looted" in out["narrative"] and "no pick_up" in out["narrative"]
     items = out["data"]["loot"]["items"]
     assert items and items[0]["item_id"] == "itm_rat_pelt"
     inv = c.get("/api/v1/status", headers=h).json()["data"]["inventory"]
     assert any(i["item_id"] == "itm_rat_pelt" for i in inv)
     evts = c.get("/api/v1/events?limit=10").json()["data"]["events"]
     assert any("Rat Pelt" in e["detail"] for e in evts), "drop should appear in the event feed"
+    # auto-loot must not leave a ground pile behind: no GroundItem row for the drop
+    db = SessionLocal()
+    from app.models import GroundItem
+    assert db.query(GroundItem).filter(
+        GroundItem.location == "oakhollow_forest",
+        GroundItem.item_id == "itm_rat_pelt").count() == 0
+    db.close()
+    # second rat kill stacks the same inventory entry instead of duplicating it
+    here2 = c.get("/api/v1/world/here", headers=h).json()["data"]
+    rat2 = next(m for m in here2["monsters"] if m["name"] == "Giant Rat")
+    out2 = None
+    for _ in range(5):
+        _set_hp_and_ready(reg["agent_id"], 25)
+        r = c.post("/api/v1/actions", json={"action": "attack", "params": {"target_id": rat2["monster_id"]}}, headers=h)
+        assert r.status_code == 200, r.text
+        out2 = r.json()
+        if out2["data"]["result"] == "kill":
+            break
+    assert out2["data"]["result"] == "kill"
+    inv2 = c.get("/api/v1/status", headers=h).json()["data"]["inventory"]
+    pelts = [i for i in inv2 if i["item_id"] == "itm_rat_pelt"]
+    assert len(pelts) == 1 and pelts[0].get("qty", 0) == 2
 
 
 def test_world_state_pick_up_and_public_hp():
