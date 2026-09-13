@@ -29,47 +29,55 @@ EDGES = [
 NPCS = [
     {"npc_id": "npc_blacksmith", "name": "Old Toran", "location": "riverside_village",
      "can_trade": True, "has_quest": True,
-     "dialogue": "Giant rats nest in Oakhollow Forest and chew through my stock. Slay 3 for me."},
+     "dialogue": "Giant rats nest in Oakhollow Forest and chew through my stock. Bring me 3 Rat Pelts."},
     {"npc_id": "npc_innkeeper", "name": "Mira the Innkeep", "location": "riverside_village",
      "can_trade": True, "has_quest": False,
      "dialogue": "Rest up, traveler. The forest is not kind to the wounded."},
     {"npc_id": "npc_captain", "name": "Captain Voss", "location": "capital_city",
      "can_trade": False, "has_quest": True,
-     "dialogue": "Trolls in the Deep Cave threaten our trade. Slay 2 cave trolls for the city!"},
+     "dialogue": "Trolls in the Deep Cave threaten our trade. Bring me 2 Troll Hides for the city!"},
     {"npc_id": "npc_hermit", "name": "Marsh Hermit", "location": "sunken_marsh",
      "can_trade": True, "has_quest": True,
-     "dialogue": "The marsh took my lantern. Slay marsh wraiths until one drops it."},
+     "dialogue": "The marsh took my lantern. Bring me 2 Wraith Essences and I'll light your way."},
     {"npc_id": "npc_scout", "name": "Scout Liora", "location": "oakhollow_forest",
      "can_trade": False, "has_quest": True,
-     "dialogue": "Wolves grow bold and stalk the road. Thin the pack — slay 3 Forest Wolves."},
+     "dialogue": "Wolves grow bold and stalk the road. Bring me 3 Wolf Pelts to thin their pride."},
     {"npc_id": "npc_merchant", "name": "Merchant Pella", "location": "capital_city",
      "can_trade": True, "has_quest": True,
-     "dialogue": "Bandits rob my caravans on the capital road. Drive off 2 Road Bandits."},
+     "dialogue": "Bandits rob my caravans on the capital road. Bring me 2 Bandit Daggers as proof."},
     {"npc_id": "npc_warden", "name": "Warden Cassia", "location": "ember_ridge",
      "can_trade": False, "has_quest": True,
-     "dialogue": "Only proven slayers need apply: bring down an Ember Drake and the ridge is yours."},
+     "dialogue": "Only proven slayers need apply: bring me a Drake Scale and the ridge is yours."},
 ]
 
 QUESTS = {
-    # Quest chain tuned so completing everything carries an agent to ~level 5.
+    # Item turn-in chain tuned so completing everything carries an agent to ~level 5.
     # xp_for_level = level * 200, so L1 needs 200 total, L1->L5 needs 2000.
-    "q_ratcatcher": {"title": "The Ratcatcher's Request", "kind": "kill",
-                     "target": "Giant Rat", "count": 3, "xp": 90, "gold": 45,
+    # Each quest consumes the listed items on turn-in (drops from the source
+    # monster, plus occasional ground loot). Drop chances live in MONSTER_DROPS.
+    "q_ratcatcher": {"title": "The Ratcatcher's Request", "kind": "collect",
+                     "item_id": "itm_rat_pelt", "item_name": "Rat Pelt", "count": 3,
+                     "xp": 90, "gold": 45,
                      "min_level": 1, "giver": "npc_blacksmith"},
-    "q_wolfpack": {"title": "Thin the Pack", "kind": "kill",
-                   "target": "Forest Wolf", "count": 3, "xp": 150, "gold": 80,
+    "q_wolfpack": {"title": "Thin the Pack", "kind": "collect",
+                   "item_id": "itm_wolf_pelt", "item_name": "Wolf Pelt", "count": 3,
+                   "xp": 150, "gold": 80,
                    "min_level": 2, "giver": "npc_scout"},
-    "q_bandit_toll": {"title": "The Bandit Toll", "kind": "kill",
-                      "target": "Road Bandit", "count": 2, "xp": 160, "gold": 100,
+    "q_bandit_toll": {"title": "The Bandit Toll", "kind": "collect",
+                      "item_id": "itm_bandit_dagger", "item_name": "Bandit Dagger", "count": 2,
+                      "xp": 160, "gold": 100,
                       "min_level": 2, "giver": "npc_merchant"},
-    "q_trollbane": {"title": "Trolls of the Deep Cave", "kind": "kill",
-                    "target": "Cave Troll", "count": 2, "xp": 220, "gold": 150,
+    "q_trollbane": {"title": "Trolls of the Deep Cave", "kind": "collect",
+                    "item_id": "itm_troll_hide", "item_name": "Troll Hide", "count": 2,
+                    "xp": 220, "gold": 150,
                     "min_level": 3, "giver": "npc_captain"},
-    "q_marshlight": {"title": "Light in the Marsh", "kind": "kill",
-                     "target": "Marsh Wraith", "count": 2, "xp": 180, "gold": 120,
+    "q_marshlight": {"title": "Light in the Marsh", "kind": "collect",
+                     "item_id": "itm_wraith_essence", "item_name": "Wraith Essence", "count": 2,
+                     "xp": 180, "gold": 120,
                      "min_level": 3, "giver": "npc_hermit"},
-    "q_drakescale": {"title": "Scale of Embers", "kind": "kill",
-                     "target": "Ember Drake", "count": 1, "xp": 400, "gold": 300,
+    "q_drakescale": {"title": "Scale of Embers", "kind": "collect",
+                     "item_id": "itm_drake_scale", "item_name": "Drake Scale", "count": 1,
+                     "xp": 400, "gold": 300,
                      "min_level": 5, "giver": "npc_warden"},
 }
 
@@ -114,7 +122,7 @@ MONSTER_DROPS = {
     "Forest Wolf": {"item_id": "itm_wolf_pelt", "name": "Wolf Pelt", "chance": 0.6},
     "Cave Troll": {"item_id": "itm_troll_hide", "name": "Troll Hide", "chance": 0.8},
     "Marsh Wraith": {"item_id": "itm_wraith_essence", "name": "Wraith Essence", "chance": 0.7},
-    "Ember Drake": {"item_id": "itm_drake_scale", "name": "Drake Scale", "chance": 1.0},
+    "Ember Drake": {"item_id": "itm_drake_scale", "name": "Drake Scale", "chance": 0.6},
     "Road Bandit": {"item_id": "itm_bandit_dagger", "name": "Bandit Dagger", "chance": 0.5, "bonus": 2},
 }
 
@@ -220,13 +228,22 @@ def danger_of(location_id):
     return "safe"
 
 
+def monster_for_item(item_id):
+    """Source monster name whose drop table yields item_id, e.g. 'Forest Wolf'."""
+    for monster_name, spec in MONSTER_DROPS.items():
+        if spec.get("item_id") == item_id:
+            return monster_name
+    return None
+
+
 def quests_at(location_id):
     """Quest offers available from NPCs at this location, with full terms."""
     out = []
     for qid, q in QUESTS.items():
         giver = next((n for n in NPCS if n["npc_id"] == q["giver"] and n["location"] == location_id), None)
         if giver:
-            out.append({"quest_id": qid, "title": q["title"], "target": q["target"],
+            out.append({"quest_id": qid, "title": q["title"], "kind": q.get("kind", "collect"),
+                        "item_id": q["item_id"], "item_name": q["item_name"],
                         "count": q["count"], "xp": q["xp"], "gold": q["gold"],
                         "min_level": q.get("min_level", 1),
                         "giver": giver["name"], "brief": quest_brief(qid)})
@@ -234,11 +251,16 @@ def quests_at(location_id):
 
 
 def quest_brief(quest_id):
-    """One-line explicit briefing: requirement, monster name, count, where, reward."""
+    """One-line explicit briefing: requirement, item, source, where, reward."""
     spec = QUESTS.get(quest_id)
     if not spec:
         return ""
-    where = ", ".join(monster_haunts(spec["target"])) or "unknown lands"
+    source = monster_for_item(spec["item_id"])
+    where = ", ".join(monster_haunts(source)) if source else ""
+    where = where or "the wilds"
+    chance = MONSTER_DROPS.get(source, {}).get("chance") if source else None
+    odds = f", {int(chance * 100)}% drop" if chance is not None else ""
     req = f"Requires level {spec.get('min_level', 1)}. "
-    return (f"{req}Slay {spec['count']} {spec['target']} "
-            f"(found in {where}); reward: +{spec['xp']} XP, +{spec['gold']} gold.")
+    return (f"{req}Bring {spec['count']}x {spec['item_name']} "
+            f"(dropped by {source} in {where}{odds}); reward: +{spec['xp']} XP, +{spec['gold']} gold. "
+            f"Turn-in consumes the items.")

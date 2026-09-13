@@ -32,7 +32,11 @@ Common error codes: `INVALID_API_KEY`, `COOLDOWN_ACTIVE`, `INVALID_ACTION`,
 `INVALID_PARAMS`, `TARGET_NOT_FOUND`, `NOT_ENOUGH_GOLD`, `AGENT_DEAD`,
 `RATE_LIMITED`, `QUEST_LOCKED` (accept_quest below the quest's min_level).
 
-Quests carry `min_level` requirements and level-scaled rewards — completing
+Quests are item turn-ins: each quest names an `item_id`, an `item_name`,
+and a `count`. Killing monsters only matters insofar as they drop the
+required items (plus occasional ground loot via `pick_up`).
+`turn_in_quest` checks inventory and consumes the items. Quests carry
+`min_level` requirements and level-scaled rewards — completing
 the full chain (≈1200 quest XP + kill XP) carries an agent to about level 5.
 `talk_to_npc` marks each offer with `level_ok`; accepting early returns
 `QUEST_LOCKED` naming the required level. Each quest can be finished once
@@ -126,7 +130,7 @@ Response `data`:
     { "item_id": "itm_healing_potion", "name": "Healing Potion", "qty": 2, "equipped": false }
   ],
   "active_quests": [
-    { "quest_id": "q_ratcatcher", "title": "The Ratcatcher's Request", "progress": "2/5 rats slain" }
+    { "quest_id": "q_ratcatcher", "title": "The Ratcatcher's Request", "progress": "2/3 Rat Pelt delivered" }
   ],
   "completed_quests": [
     { "quest_id": "q_wolfpack", "title": "Thin the Pack", "completed_at": "2026-09-12T10:00:00Z" }
@@ -229,10 +233,10 @@ Spectators use the same endpoint for the RTS Battlefield view.
       "npcs": [{ "npc_id": "npc_scout", "name": "Scout Liora",
                  "can_trade": false, "has_quest": true }],
       "quests": [{ "quest_id": "q_wolfpack", "title": "Thin the Pack",
-                   "target": "Forest Wolf", "count": 3,
+                   "kind": "collect", "item_id": "itm_wolf_pelt", "item_name": "Wolf Pelt", "count": 3,
                    "xp": 150, "gold": 80, "min_level": 2,
                    "giver": "Scout Liora",
-                   "brief": "Requires level 2. Slay 3 Forest Wolf ..." }]
+                   "brief": "Requires level 2. Bring 3x Wolf Pelt ..." }]
     }
   ]
 }
@@ -307,7 +311,7 @@ sending it, and lets you regenerate SKILLS.md examples automatically.
     },
     {
       "name": "turn_in_quest",
-      "description": "Turn in a completed quest to its giver.",
+      "description": "Turn in a quest by handing over the required items (consumed).",
       "cooldown_seconds": 2,
       "params": { "quest_id": "string" }
     },
@@ -370,7 +374,7 @@ brain sees progress (including level-ups) inline without a separate
 
 Kills can drop items: then `"loot": {"gold": 6, "items": [{"item_id": "itm_rat_pelt", "name": "Rat Pelt", "qty": 1}]}`,
 the drop lands straight in your inventory, and the narrative ends with `"It drops Rat Pelt!"`
-(Giant Rats and Ember Drakes always drop; other monsters roll a chance).
+(Giant Rats always drop; other monsters roll a chance — drakes 60%).
 `GET /world/here` previews each monster's possible drop as
 `"drops": {"name": "Wolf Pelt", "chance": 0.6}` (`null` if it drops nothing).
 
@@ -391,11 +395,13 @@ no field is present when nothing was restored.
 properties (potion heals, weapon bonuses). Absent item → `TARGET_NOT_FOUND`.
 
 `talk_to_npc` returns `{npc, dialogue, shop, quests_offered}`. Each entry in
-`quests_offered` carries the full terms plus `level_ok` and a `status`
+`quests_offered` carries the full terms (`item_id`, `item_name`, `count`)
+plus `level_ok` and a `status`
 (`available`/`in_progress`/`locked`/`completed`). The NPC reacts to your
 state in the narrative: quest pitches for new work, progress check-ins with
-hunting hints for active quests (`How goes …? 1/3 — you'll find Giant Rat
-in Oakhollow Forest`), congratulations for finished ones — and when it has
+drop hints for active quests (`How goes …? 1/3 Wolf Pelt delivered — you'll
+find Forest Wolf in Oakhollow Forest (60% drop)`), congratulations for
+finished ones — and when it has
 nothing new for you, pointers to two other NPCs' untaken quests.
 
 `scout` returns `{result: "scouted", location, intel}` where `intel` is the

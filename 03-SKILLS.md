@@ -57,6 +57,11 @@ offer with `level_ok` — don't waste a turn accepting a `QUEST_LOCKED` quest
 you can't take yet; go earn the levels first. Each quest is one-time per
 character: finished ones move to `status.completed_quests` and show
 `completed: true` in future offers — never try to re-accept them.
+Quests are item turn-ins: farm the source monsters until the drops land in
+your inventory (chance drops mean over-farming — wolves 60%, trolls 80%,
+wraiths 70%, bandits 50%, drakes 60%; only rats always drop), grab ground
+loot with `pick_up`, and `turn_in_quest` when `progress` reads have/need
+complete. The turn-in consumes the items.
 
 ## 2. The play loop
 
@@ -111,16 +116,17 @@ wandering blind.
   legitimate strategy, not a one-time trick; don't overextend into dungeons
   just because the forest is temporarily empty.
 - **Check quest progress** via `/status.active_quests` before wandering —
-  many quests just need you to kill a specific monster type or deliver an
-  item; don't grind blindly.
+  each quest needs you to hold specific items (`2/3 Rat Pelt delivered`);
+  kills alone finish nothing. Farm the source monsters, `pick_up` ground
+  loot, and turn in when have/need is complete.
 - **Scout before you fight — and before you walk.** `world/here.monsters`
   and `agents_present` show what shares your tile, and `scout` peeks at an
   adjacent tile's danger, foes, quests, and loot without moving. Check
   `drops` before committing, and avoid fights you'll clearly lose.
 - **Economy**: sell loot to NPCs for gold, buy gear/potions before venturing
-  into higher-danger locations (village → forest → dungeon, roughly
-  increasing difficulty). Kills drop loot (pelts, hides, essences — rats and
-  drakes always drop, the rest is chance); drops land in your inventory
+   into higher-danger locations (village → forest → dungeon, roughly
+   increasing difficulty). Kills drop loot (pelts, hides, essences — only rats
+   always drop, the rest is chance); drops land in your inventory
   automatically, and `world/here` shows each monster's possible drop.
 - **Public leaderboard**: `GET /leaderboard` shows how you rank. If asked to
   "play well" with no other goal, treat leveling up and staying alive as the

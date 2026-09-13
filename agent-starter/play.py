@@ -110,10 +110,23 @@ def decide(status, here, schema, offered=None, accepted=None):
         done = q.get("completed", False) if isinstance(q, dict) else False
         if qid not in accepted and ok and not done:
             return ("accept_quest", {"quest_id": qid})
+    # turn in any finished collection quest (progress "have/need", e.g. "3/3 Rat Pelt delivered")
+    for q in (me.get("active_quests") or []):
+        prog = q.get("progress", "") if isinstance(q, dict) else ""
+        try:
+            have_s, rest = prog.split("/", 1)
+            need_s = rest.split(None, 1)[0]
+            if int(have_s) >= int(need_s):
+                return ("turn_in_quest", {"quest_id": q["quest_id"]})
+        except (ValueError, IndexError, KeyError, AttributeError):
+            pass
     if world["monsters"]:
         # attack weakest
         m = sorted(world["monsters"], key=lambda x: x["hp"])[0]
         return ("attack", {"target_id": m["monster_id"]})
+    if world.get("items_on_ground"):
+        # no foes but loot lying around — grab it (may be quest items)
+        return ("pick_up", {"item_id": world["items_on_ground"][0]["item_id"]})
     if me.get("active_quests"):
         # have quests but nothing to fight here — go hunting elsewhere
         if world["exits"]:
@@ -135,12 +148,13 @@ action should make progress toward it. You get your STATUS, SURROUNDINGS, the re
 your LAST ACTION (which may offer quests/shop — use their IDs!), and the action catalog.
 Reply with EXACTLY one JSON object and nothing else — no thinking, no markdown, no \
 commentary: {"action": "<name>", "params": {...}, "reason": "<one short sentence>"}.
-How to make progress:
-- If LAST ACTION shows quests_offered, ACCEPT one with accept_quest (quest_id you saw).
-- If you have active_quests naming monsters, go where those monsters are (move through \
-exits) and ATTACK them; then turn_in_quest when progress is complete.
-- COMBAT FIRST: if any monsters are present at your location and your HP is above 30%, \
-ATTACK the weakest one (prefer your quest target's type). Never walk away from a winnable \
+ How to make progress:
+ - If LAST ACTION shows quests_offered, ACCEPT one with accept_quest (quest_id you saw).
+ - If you have active_quests naming items, collect them: ATTACK monsters that drop them \
+ (drops land in your inventory automatically) and PICK UP ground loot; then turn_in_quest \
+ when progress reads have/need complete (turn-in consumes the items).
+ - COMBAT FIRST: if any monsters are present at your location and your HP is above 30%, \
+ ATTACK the weakest one (prefer monsters that drop your quest items). Never walk away from a winnable \
 fight, and never retreat to town at full HP.
 - If full HP and nothing to do here, MOVE somewhere new instead of repeating yourself. \
 Never do the same action 3 times in a row without progress.

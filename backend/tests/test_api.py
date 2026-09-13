@@ -183,23 +183,25 @@ def test_village_regen():
     assert "Safe ground" in town["narrative"] and "+5 HP" in town["narrative"]
 
 
-def test_quest_brief_names_monster_and_location():
+def test_quest_brief_names_item_and_location():
     c = fresh_client()
     reg = register(c, "Questor")
     h = {"Authorization": f"Bearer {reg['api_key']}"}
     talk = c.post("/api/v1/actions", json={"action": "talk_to_npc", "params": {"npc_id": "npc_blacksmith"}}, headers=h)
     assert talk.status_code == 200, talk.text
     body = talk.json()
-    assert "Giant Rat" in body["narrative"] and "Oakhollow Forest" in body["narrative"]
+    assert "Rat Pelt" in body["narrative"] and "Oakhollow Forest" in body["narrative"]
     assert "q_ratcatcher" in body["narrative"]
     offered = body["data"]["quests_offered"][0]
-    assert offered["target"] == "Giant Rat" and offered["count"] == 3
+    assert offered["item_id"] == "itm_rat_pelt" and offered["item_name"] == "Rat Pelt"
+    assert offered["count"] == 3
+    assert "target" not in offered
     _set_hp_and_ready(reg["agent_id"], 25)
     acc = c.post("/api/v1/actions", json={"action": "accept_quest", "params": {"quest_id": "q_ratcatcher"}}, headers=h)
     assert acc.status_code == 200, acc.text
-    assert "Giant Rat" in acc.json()["narrative"] and "Oakhollow Forest" in acc.json()["narrative"]
+    assert "Rat Pelt" in acc.json()["narrative"] and "Oakhollow Forest" in acc.json()["narrative"]
     st = c.get("/api/v1/status", headers=h).json()["data"]
-    assert "Giant Rat" in st["active_quests"][0]["progress"]
+    assert "Rat Pelt" in st["active_quests"][0]["progress"]
 
 
 def test_monster_drop_shown_on_kill_and_in_here():
@@ -400,7 +402,9 @@ def test_world_state_full_place_intel():
     toran = next(n for n in by_id["riverside_village"]["npcs"] if n["npc_id"] == "npc_blacksmith")
     assert toran["has_quest"] is True and toran["can_trade"] is True
     rq = next(q for q in by_id["riverside_village"]["quests"] if q["quest_id"] == "q_ratcatcher")
-    assert rq["target"] == "Giant Rat" and rq["min_level"] == 1 and "Giant Rat" in rq["brief"]
+    assert rq["item_id"] == "itm_rat_pelt" and rq["item_name"] == "Rat Pelt" and rq["min_level"] == 1
+    assert "Rat Pelt" in rq["brief"] and "Giant Rat" in rq["brief"]
+    assert "target" not in rq
     assert rq["giver"] == "Old Toran"
     # warden's end-game quest is visible with its gate from anywhere
     dq = next(q for q in by_id["ember_ridge"]["quests"] if q["quest_id"] == "q_drakescale")
@@ -442,16 +446,20 @@ def test_scout_reveals_neighbor_without_moving():
     assert bad.json()["detail"]["error"]["code"] == "INVALID_PARAMS"
 
 
-def _set_quest_count(agent_id, quest_id, count):
+def _give_quest_items(agent_id, item_id, qty, name=None):
+    """Add qty of item_id to the agent's inventory (quest-item test setup)."""
     import json as _json
     from app.models import Agent as _A
     db = SessionLocal()
     a = db.query(_A).filter(_A.id == agent_id).first()
-    qs = _json.loads(a.quests)
-    for q in qs:
-        if q["quest_id"] == quest_id:
-            q["count"] = count
-    a.quests = _json.dumps(qs)
+    inv = _json.loads(a.inventory)
+    have = next((i for i in inv if i["item_id"] == item_id), None)
+    if have:
+        have["qty"] = have.get("qty", 0) + qty
+    else:
+        inv.append({"item_id": item_id, "name": name or item_id,
+                    "qty": qty, "equipped": False})
+    a.inventory = _json.dumps(inv)
     db.commit()
     db.close()
 
@@ -461,11 +469,15 @@ def test_completed_quest_flagged_and_not_repeatable():
     reg = register(c, "Finisher")
     h = {"Authorization": f"Bearer {reg['api_key']}"}
     assert c.post("/api/v1/actions", json={"action": "accept_quest", "params": {"quest_id": "q_ratcatcher"}}, headers=h).status_code == 200
-    _set_quest_count(reg["agent_id"], "q_ratcatcher", 3)
+    _give_quest_items(reg["agent_id"], "itm_rat_pelt", 3, "Rat Pelt")
     _set_hp_and_ready(reg["agent_id"], 25)
     done = c.post("/api/v1/actions", json={"action": "turn_in_quest", "params": {"quest_id": "q_ratcatcher"}}, headers=h)
     assert done.status_code == 200, done.text
     assert done.json()["data"]["result"] == "quest_turned_in"
+    assert done.json()["data"]["items_consumed"] == {"item_id": "itm_rat_pelt", "qty": 3}
+    # turn-in consumes the items
+    st = c.get("/api/v1/status", headers=h).json()["data"]
+    assert not any(i["item_id"] == "itm_rat_pelt" for i in st["inventory"])
     # completion is flagged on the player
     st = c.get("/api/v1/status", headers=h).json()["data"]
     assert st["active_quests"] == []
@@ -523,19 +535,64 @@ def test_npc_notices_quest_state_and_suggests_other_work():
     h = {"Authorization": f"Bearer {reg['api_key']}"}
     # fresh: quest pitched as available with full brief
     t1 = _talk(c, h, reg["agent_id"], "npc_blacksmith")
-    assert "Slay 3 Giant Rat" in t1["narrative"]
+    assert "Bring 3x Rat Pelt" in t1["narrative"]
     assert t1["data"]["quests_offered"][0]["status"] == "available"
-    # accepted: NPC notices progress and hints where prey lives
+    # accepted: NPC notices progress and hints where the drops come from
     _set_hp_and_ready(reg["agent_id"], 25)
     assert c.post("/api/v1/actions", json={"action": "accept_quest", "params": {"quest_id": "q_ratcatcher"}}, headers=h).status_code == 200
     t2 = _talk(c, h, reg["agent_id"], "npc_blacksmith")
     assert "How goes" in t2["narrative"] and "Oakhollow Forest" in t2["narrative"]
+    assert "Rat Pelt" in t2["narrative"]
     assert t2["data"]["quests_offered"][0]["status"] == "in_progress"
     # completed: congratulated and pointed at other NPCs' work
-    _set_quest_count(reg["agent_id"], "q_ratcatcher", 3)
+    _give_quest_items(reg["agent_id"], "itm_rat_pelt", 3, "Rat Pelt")
     _set_hp_and_ready(reg["agent_id"], 25)
     assert c.post("/api/v1/actions", json={"action": "turn_in_quest", "params": {"quest_id": "q_ratcatcher"}}, headers=h).status_code == 200
     t3 = _talk(c, h, reg["agent_id"], "npc_blacksmith")
     assert "fine work" in t3["narrative"]
     assert t3["data"]["quests_offered"][0]["status"] == "completed"
     assert "For more work" in t3["narrative"] and "Scout Liora" in t3["narrative"]
+
+
+def test_turn_in_without_items_fails_and_names_need():
+    c = fresh_client()
+    reg = register(c, "EmptyHanded")
+    h = {"Authorization": f"Bearer {reg['api_key']}"}
+    assert c.post("/api/v1/actions", json={"action": "accept_quest", "params": {"quest_id": "q_ratcatcher"}}, headers=h).status_code == 200
+    _set_hp_and_ready(reg["agent_id"], 25)
+    # no pelts held: turn-in refused, naming have/need and the source
+    bad = c.post("/api/v1/actions", json={"action": "turn_in_quest", "params": {"quest_id": "q_ratcatcher"}}, headers=h)
+    body = bad.json()["detail"]
+    assert body["error"]["code"] == "INVALID_PARAMS"
+    assert "3x Rat Pelt" in body["error"]["message"] and "Giant Rat" in body["error"]["message"]
+    # partial stack still refused
+    _give_quest_items(reg["agent_id"], "itm_rat_pelt", 2, "Rat Pelt")
+    _set_hp_and_ready(reg["agent_id"], 25)
+    short = c.post("/api/v1/actions", json={"action": "turn_in_quest", "params": {"quest_id": "q_ratcatcher"}}, headers=h)
+    assert short.json()["detail"]["error"]["code"] == "INVALID_PARAMS"
+    assert "you hold 2" in short.json()["detail"]["error"]["message"]
+    # quest still active, progress reflects the partial stack
+    st = c.get("/api/v1/status", headers=h).json()["data"]
+    assert st["active_quests"][0]["progress"] == "2/3 Rat Pelt delivered"
+
+
+def test_kills_alone_do_not_complete_item_quest():
+    import json as _json
+    from app.models import Agent as _A
+    c = fresh_client()
+    reg = register(c, "Grinder")
+    h = {"Authorization": f"Bearer {reg['api_key']}"}
+    assert c.post("/api/v1/actions", json={"action": "accept_quest", "params": {"quest_id": "q_ratcatcher"}}, headers=h).status_code == 200
+    # simulate stored legacy kill-count fields: server must ignore them
+    db = SessionLocal()
+    a = db.query(_A).filter(_A.id == reg["agent_id"]).first()
+    qs = _json.loads(a.quests)
+    qs[0]["count"] = 99
+    a.quests = _json.dumps(qs)
+    db.commit()
+    db.close()
+    _set_hp_and_ready(reg["agent_id"], 25)
+    bad = c.post("/api/v1/actions", json={"action": "turn_in_quest", "params": {"quest_id": "q_ratcatcher"}}, headers=h)
+    assert bad.json()["detail"]["error"]["code"] == "INVALID_PARAMS"
+    st = c.get("/api/v1/status", headers=h).json()["data"]
+    assert st["active_quests"][0]["progress"] == "0/3 Rat Pelt delivered"

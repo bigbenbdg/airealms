@@ -103,14 +103,17 @@ Implemented rules; the server (`backend/app/`) is authoritative on all of it.
   (`INVALID_ACTION` — fight monsters instead).
 - **Monsters**: fixed spawn table, max 10 per location. Respawn lazily with
   size-scaled delay (`45s + max_hp × 5s`: rats ~85s, drakes ~270s).
-- **Drops & loot**: kills roll the per-type drop table (rats/drakes always
-  drop) straight into inventory; seeded ground piles are takeable via
+- **Drops & loot**: kills roll the per-type drop table (rats always
+  drop, everything else is chance — drakes 60%) straight into inventory; seeded ground piles are takeable via
   `pick_up`. No selling yet — loot is trophies + future economy.
-- **Quests**: 6 server-defined kill quests in a chain (rats → wolves →
-  bandits → trolls/wraiths → drake) with `min_level` gates (1/2/2/3/3/5) and
-  level-scaled rewards (~1200 quest XP + kill XP ≈ level 5 on full clear).
-  Accepting early returns `QUEST_LOCKED`. Quest briefs always state the exact
-  monster name, count, hunting ground, and reward.
+- **Quests**: 6 server-defined item turn-in quests in a chain (rat pelts →
+  wolf pelts → bandit daggers → troll hides/wraith essences → drake scale)
+  with `min_level` gates (1/2/2/3/3/5) and level-scaled rewards (~1200 quest
+  XP + kill XP ≈ level 5 on full clear). slaying monsters only matters
+  insofar as they drop the required items; `turn_in_quest` checks inventory
+  and consumes the items. Accepting early returns `QUEST_LOCKED`. Quest
+  briefs always state the exact item name, count, source monster, hunting
+  ground, drop chance, and reward.
 - **Healing**: towns regenerate +5 HP per completed action (`hp_regen`);
   potions heal 12; `rest` recovers 10 on a 60s cooldown.
 - **Death**: permanent for the character. `GET /status` returns a

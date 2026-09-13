@@ -14,7 +14,8 @@ from .db import Base, engine, get_db, SessionLocal, ensure_schema
 from .models import Agent, Monster, GroundItem, WorldEvent, utcnow
 from .seed import (LOCATIONS, EDGES, NPCS, QUESTS, SHOP, STARTER_INVENTORY,
                    seed_monsters, seed_ground, exits_from, loc_by_id, quest_brief, roll_drop,
-                   MONSTER_DROPS, ground_item_props, danger_of, quests_at, monster_haunts)
+                   MONSTER_DROPS, ground_item_props, danger_of, quests_at, monster_haunts,
+                   monster_for_item)
 from .engine import (ACTION_DEFS, check_rate_limit, check_idempotency, store_idempotency,
                      load_json, apply_xp, player_attack_damage, monster_attack_damage,
                      set_cooldown, cooldown_remaining, manager, xp_for_level,
@@ -84,6 +85,28 @@ def emit(db: Session, type_: str, agent_name="", agent_id="", detail=""):
 
 async def fanout(payload: dict):
     await manager.broadcast(payload)
+
+
+def _quest_have(inv: list, spec: dict) -> int:
+    """Total qty of the quest's required item held in inventory."""
+    need = spec.get("item_id", "")
+    return sum(i.get("qty", 0) for i in inv if i.get("item_id") == need)
+
+
+def _quest_progress(inv: list, spec: dict) -> str:
+    have = _quest_have(inv, spec)
+    return f"{min(have, spec['count'])}/{spec['count']} {spec['item_name']} delivered"
+
+
+def _quest_hint(spec: dict) -> str:
+    """Where to find the required items, e.g. 'Forest Wolf in Oakhollow Forest (60% drop)'."""
+    source = monster_for_item(spec.get("item_id", ""))
+    if not source:
+        return "the wilds"
+    where = ", ".join(monster_haunts(source)) or "the wilds"
+    chance = MONSTER_DROPS.get(source, {}).get("chance")
+    odds = f" ({int(chance * 100)}% drop)" if chance is not None else ""
+    return f"{source} in {where}{odds}"
 
 
 def agent_public(a: Agent):
@@ -168,7 +191,8 @@ def status(agent: Agent = Depends(get_agent), db: Session = Depends(get_db)):
         "stats": load_json(agent.stats, {}), "gold": agent.gold, "location": agent.location,
         "status_effects": [], "inventory": inv,
         "active_quests": [{"quest_id": q["quest_id"], "title": q["title"],
-                           "progress": q.get("progress", "")} for q in quests if not q.get("done")],
+                           "progress": _quest_progress(inv, QUESTS[q["quest_id"]])}
+                          for q in quests if not q.get("done") and q["quest_id"] in QUESTS],
         "completed_quests": [{"quest_id": q["quest_id"], "title": q["title"],
                               "completed_at": q.get("completed_at")}
                              for q in quests if q.get("done")],
@@ -371,13 +395,8 @@ def _apply_action(db, agent, action, params):
             m.died_at = utcnow()
             agent.gold += m.gold_reward
             agent.kills += 1
-            # quest progress
-            for q in quests:
-                spec = QUESTS.get(q["quest_id"])
-                if spec and not q.get("done") and spec["kind"] == "kill" and spec["target"] == m.name:
-                    q["count"] = q.get("count", 0) + 1
-                    q["progress"] = f"{min(q['count'], spec['count'])}/{spec['count']} {spec['target']} slain"
-            save_quests()
+            # Quest progress is purely item-based (see turn_in_quest): kills only
+            # matter insofar as they drop the required items.
             leveled = apply_xp(agent, m.xp_reward)
             drop = roll_drop(m.name)
             loot_items = []
@@ -489,9 +508,9 @@ def _apply_action(db, agent, action, params):
             if state and state.get("done"):
                 status, note = "completed", (f"'{spec['title']}' is done — fine work, {agent.name}. ")
             elif state:
-                where = ", ".join(monster_haunts(spec["target"])) or "unknown lands"
-                status, note = "in_progress", (f"How goes '{spec['title']}'? {state.get('progress', '')} — "
-                                               f"you'll find {spec['target']} in {where}. ")
+                status, note = "in_progress", (f"How goes '{spec['title']}'? {_quest_progress(inv, spec)} — "
+                                               f"you'll find {_quest_hint(spec)}. "
+                                               f"Bring the goods and turn_in_quest when you hold enough. ")
             elif not level_ok:
                 status, note = "locked", (f"'{spec['title']}' [{qid}] needs level {spec.get('min_level', 1)} — "
                                           f"come back stronger. ")
@@ -536,8 +555,7 @@ def _apply_action(db, agent, action, params):
         if agent.level < need:
             err("QUEST_LOCKED", f"'{spec['title']}' requires level {need} (you are level {agent.level}). "
                                 f"Level up first — try easier quests or grind weaker monsters.", status=403)
-        quests.append({"quest_id": qid, "title": spec["title"], "count": 0,
-                       "progress": f"0/{spec['count']} {spec['target']} slain", "done": False})
+        quests.append({"quest_id": qid, "title": spec["title"], "done": False})
         save_quests()
         return {"result": "quest_accepted", "quest_id": qid}, \
                f"Quest accepted: {spec['title']}. {quest_brief(qid)}"
@@ -550,10 +568,27 @@ def _apply_action(db, agent, action, params):
             err("TARGET_NOT_FOUND", f"Unknown quest '{qid}'.")
         if q.get("done"):
             err("INVALID_PARAMS", "Quest already turned in.")
-        if q.get("count", 0) < spec["count"]:
-            err("INVALID_PARAMS", f"Quest incomplete: {q.get('progress')}.")
+        have = _quest_have(inv, spec)
+        if have < spec["count"]:
+            err("INVALID_PARAMS",
+                f"Quest incomplete: need {spec['count']}x {spec['item_name']}, "
+                f"you hold {have}. {_quest_hint(spec)} drop them.")
+        # Consume the required items: unequipped copies first, then equipped
+        # (matters for e.g. the Bandit Dagger, which is equippable gear).
+        need = spec["count"]
+        for item in sorted(inv, key=lambda i: bool(i.get("equipped"))):
+            if need <= 0:
+                break
+            if item.get("item_id") != spec["item_id"]:
+                continue
+            take = min(item.get("qty", 0), need)
+            item["qty"] -= take
+            need -= take
+        inv[:] = [i for i in inv if i.get("qty", 0) > 0]
+        save_inv()
         q["done"] = True
         q["completed_at"] = now_iso()
+        q["progress"] = f"{spec['count']}/{spec['count']} {spec['item_name']} delivered"
         agent.gold += spec["gold"]
         agent.quests_completed += 1
         leveled = apply_xp(agent, spec["xp"])
@@ -562,7 +597,9 @@ def _apply_action(db, agent, action, params):
         if leveled:
             _queue(emit(db, "level_up", agent.name, agent.id, f"{agent.name} reached level {agent.level}."))
         return {"result": "quest_turned_in", "gold_gained": spec["gold"],
-                "xp_gained": spec["xp"]}, f"Quest complete: {spec['title']}! +{spec['gold']} gold, +{spec['xp']} XP."
+                "xp_gained": spec["xp"],
+                "items_consumed": {"item_id": spec["item_id"], "qty": spec["count"]}}, \
+            f"Quest complete: {spec['title']}! You hand over {spec['count']}x {spec['item_name']}. +{spec['gold']} gold, +{spec['xp']} XP."
 
     if action == "rest":
         agent.hp = min(agent.max_hp, agent.hp + 10)
