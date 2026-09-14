@@ -4,7 +4,8 @@ register once -> loop: status -> world/here -> ONE action -> respect cooldown.
 The brain is an OpenAI-compatible chat model (configure via --llm-base/--llm-model).
 LLM mode never falls back: any bad/missing reply is fed back as a retry
 note and asked again after 10s on refreshed state. `--no-llm` forces the
-built-in heuristic instead.
+built-in heuristic instead. The LLM also gets compact HISTORY (--history N,
+default 3) of recent turns so it can learn trends instead of repeating failures.
 
 Usage:
   python play.py --base http://localhost:8000/api/v1 --name "Sir Reginald Bot"
@@ -44,6 +45,8 @@ def main():
     ap.add_argument("--goal", default="",
                     help="objective read to the LLM every turn (default: server /meta/goals)")
     ap.add_argument("--no-llm", action="store_true", help="force heuristic play, ignore LLM")
+    ap.add_argument("--history", type=int, default=int(os.getenv("AIREALMS_HISTORY", "3")),
+                    help="how many past turns of compact history to feed the LLM (0 disables)")
     args = ap.parse_args()
 
     use_llm = bool(args.llm_key and args.llm_base) and not args.no_llm
@@ -117,6 +120,27 @@ def main():
     offered = []         # quest offers seen in talk_to_npc results (with giver)
     accepted = set()     # quest_ids we accepted (heuristic memory)
     recent = []          # recent {action, params} (loop detection + LLM context)
+    history = []         # compact per-turn memory for the LLM (in-memory only)
+    history_limit = max(0, args.history)
+
+    def push_history(turn, me, action, params, narrative, snap=None, result="ok"):
+        """Append one compact turn summary; keeps full run list, LLM sees last N."""
+        snap = snap or {}
+        try:
+            history.append({
+                "turn": turn,
+                "location": me.get("location", ""),
+                "hp": f"{me.get('hp', '?')}/{me.get('max_hp', '?')}",
+                "action": action,
+                "params": params or {},
+                "narrative": str(narrative or "")[:300],
+                "level": snap.get("level", me.get("level")),
+                "xp": snap.get("xp", me.get("xp")),
+                "gold": snap.get("gold", me.get("gold")),
+                "result": result,
+            })
+        except Exception:
+            pass
 
     for t in range(args.turns):
         if t % 3 == 0:
@@ -162,7 +186,9 @@ def main():
                                       args.llm_base, args.llm_model, args.llm_key,
                                       goal=goal, last_result=last_result,
                                       recent=recent, overview=overview,
-                                      retry_note=retry_note)
+                                      retry_note=retry_note,
+                                      history=history[-history_limit:] if history_limit else [],
+                                      history_limit=history_limit, offered=offered)
                 except Exception as e:
                     retry_note = (f"Your previous reply failed: {e}. Reply with ONLY one JSON "
                                   f"object {{\"action\", \"params\", \"reason\"}}, copying every "
@@ -201,6 +227,8 @@ def main():
             print(f"Action rejected ({e}). Sitting this turn out.")
             last_result = {"narrative": f"My {choice[0]} was rejected: {e}",
                            "data": {"action": choice[0], "result": "rejected"}}
+            push_history(t + 1, me, choice[0], choice[1], last_result["narrative"],
+                         result="rejected")
             time.sleep(3)
             continue
         print("Result:", out["narrative"])
@@ -235,6 +263,8 @@ def main():
                 offered.append(entry)
         if choice[0] == "accept_quest" and choice[1].get("quest_id"):
             accepted.add(choice[1]["quest_id"])
+        push_history(t + 1, me, choice[0], choice[1], out.get("narrative", ""),
+                     snap=snap or None, result="ok")
         cd = out["data"].get("cooldown_seconds", 5)
         if t < args.turns - 1:
             time.sleep(cd + 1)

@@ -9,9 +9,12 @@ DEFAULT_GOAL = ("Level up, complete quests, grow stronger, and stay alive. "
 
 SYSTEM_PROMPT = """You play AI Realms, a persistent RPG. You have a GOAL (below) — every \
 action should make progress toward it. You get your STATUS, SURROUNDINGS, the result of \
-your LAST ACTION (which may offer quests/shop — use their IDs!), and the action catalog.
+your LAST ACTION (which may offer quests/shop — use their IDs!), HISTORY (compact \
+summaries of the last few turns — learn trends, don't repeat failures, continue \
+multi-step plans like hunt -> return -> turn-in), and the action catalog.
 Reply with EXACTLY one JSON object and nothing else — no thinking, no markdown, no \
-commentary: {"action": "<name>", "params": {...}, "reason": "<one short sentence>"}.
+commentary: {"action": "<name>", "params": {...}, "reason": "<one short sentence>"}. \
+Use HISTORY to avoid repeating failed actions and to continue multi-step plans..
  How to make progress:
   - If LAST ACTION shows quests_offered, ACCEPT one with accept_quest (quest_id you saw) — \
  you are already at the giver, so the location+talk rule is satisfied.
@@ -115,18 +118,41 @@ def collect_ids(status, here, last_result, offered):
     }
 
 
+def _format_history(history, limit=3):
+    """Format compact per-turn history for the prompt. Truncates narratives."""
+    items = (history or [])[-limit:] if limit > 0 else []
+    lines = []
+    for h in items:
+        if not isinstance(h, dict):
+            continue
+        narr = str(h.get("narrative", ""))[:300]
+        entry = {k: h.get(k) for k in
+                 ("turn", "location", "hp", "action", "level", "xp", "gold", "result")
+                 if h.get(k) is not None}
+        entry["params"] = h.get("params", {})
+        entry["narrative"] = narr
+        try:
+            lines.append(json.dumps(entry))
+        except (TypeError, ValueError):
+            continue
+    return "\n".join(lines)
+
+
 def llm_decide(status, here, schema, llm_base, llm_model, llm_key,
                goal=DEFAULT_GOAL, last_result=None, recent=None, overview="",
-               retry_note="", timeout=60):
+               retry_note="", timeout=60, history=None, history_limit=3, offered=None):
     """Ask the chat model for one action. Returns (action, params) or None."""
     actions = schema["data"]["actions"]
     last = last_result or {"narrative": "(first turn — no previous action yet)", "data": {}}
-    ids = collect_ids(status, here, last_result, None)
+    ids = collect_ids(status, here, last_result, offered)
     id_block = "\n".join(f"- {k}: {v if v else '(none available)'}" for k, v in ids.items())
+    history_block = _format_history(history, limit=history_limit)
     user_msg = ("GOAL:\n" + goal
                 + "\n\nSTATUS:\n" + json.dumps(status["data"])
                 + "\n\nSURROUNDINGS:\n" + json.dumps(here["data"])
                 + "\n\nLAST ACTION RESULT:\n" + json.dumps(last)
+                + "\n\nHISTORY (last few turns — oldest first, learn trends, don't repeat failures):\n"
+                + (history_block if history_block else "(no earlier turns yet)")
                 + "\n\nYOUR RECENT ACTIONS:\n" + json.dumps((recent or [])[-5:])
                 + (("\n\nREALM OVERVIEW (every place — plan routes, quests, prey):\n" + overview)
                    if overview else "")
