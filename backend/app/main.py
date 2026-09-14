@@ -419,9 +419,9 @@ async def do_action(body: dict, request: Request, agent: Agent = Depends(get_age
         "location": db_agent.location, "alive": db_agent.alive,
         "inventory": load_json(db_agent.inventory, []),
         "equipped": _equipped_snapshot(db_agent),
-        "active_quests": _active_quests_snapshot(db_agent),
         "cooldown_seconds_remaining": cooldown_remaining(db_agent),
     }
+    result["active_quests"] = _active_quests_snapshot(db_agent)
     db.commit()
     for evt in _pending_events(db):
         await fanout(evt)

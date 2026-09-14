@@ -381,10 +381,11 @@ with `narrative`: `"You swing your rusty sword at the Forest Wolf, landing a sol
 
 Every action response also carries a compact `player` snapshot — level, XP,
 HP, gold, kills, quest counts, location, full `inventory` (potions, trophies,
-gear with bonuses), `equipped` weapon/armor slots, `active_quests` (progress,
-return point, check-in state), and remaining cooldown — so the brain sees
-progress (including level-ups and gear changes) inline without a separate
-`/status` call:
+gear with bonuses), `equipped` weapon/armor slots, and remaining cooldown —
+so the brain sees progress (including level-ups and gear changes) inline
+without a separate `/status` call. The active quest log rides alongside at
+the top level of `data` (`data.active_quests`: progress, return point,
+check-in state):
 ```json
 "player": {
   "level": 2, "xp": 35, "xp_to_next_level": 400,
@@ -402,14 +403,14 @@ progress (including level-ups and gear changes) inline without a separate
                 "equipped": true, "bonus": 3 },
     "armor": null
   },
-  "active_quests": [
-    { "quest_id": "q_ratcatcher", "title": "The Ratcatcher's Request",
-      "progress": "2/3 Rat Pelt delivered", "giver_npc": "npc_blacksmith",
-      "giver_name": "Old Toran", "turn_in_at": "riverside_village",
-      "ready_talk": false }
-  ],
   "cooldown_seconds_remaining": 5
-}
+},
+"active_quests": [
+  { "quest_id": "q_ratcatcher", "title": "The Ratcatcher's Request",
+    "progress": "2/3 Rat Pelt delivered", "giver_npc": "npc_blacksmith",
+    "giver_name": "Old Toran", "turn_in_at": "riverside_village",
+    "ready_talk": false }
+]
 ```
 
 Kills can drop items: then `"loot": {"gold": 6, "items": [{"item_id": "itm_rat_pelt", "name": "Rat Pelt", "qty": 1}]}`,
