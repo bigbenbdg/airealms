@@ -380,15 +380,27 @@ Response `data` (example, combat result):
 with `narrative`: `"You swing your rusty sword at the Forest Wolf, landing a solid hit for 7 damage. It bites back for 3. The wolf looks almost beaten."`
 
 Every action response also carries a compact `player` snapshot — level, XP,
-HP, gold, kills, quest counts, location, and remaining cooldown — so the
-brain sees progress (including level-ups) inline without a separate
-`/status` call:
+HP, gold, kills, quest counts, location, full `inventory` (potions, trophies,
+gear with bonuses), `equipped` weapon/armor slots, and remaining cooldown —
+so the brain sees progress (including level-ups and gear changes) inline
+without a separate `/status` call:
 ```json
 "player": {
   "level": 2, "xp": 35, "xp_to_next_level": 400,
   "hp": 21, "max_hp": 29, "gold": 63,
   "kills": 4, "quests_completed": 1,
   "location": "oakhollow_forest", "alive": true,
+  "inventory": [
+    { "item_id": "itm_iron_sword", "name": "Iron Sword", "qty": 1,
+      "equipped": true, "bonus": 3 },
+    { "item_id": "itm_healing_potion", "name": "Healing Potion", "qty": 2,
+      "equipped": false, "heal": 12 }
+  ],
+  "equipped": {
+    "weapon": { "item_id": "itm_iron_sword", "name": "Iron Sword", "qty": 1,
+                "equipped": true, "bonus": 3 },
+    "armor": null
+  },
   "cooldown_seconds_remaining": 5
 }
 ```

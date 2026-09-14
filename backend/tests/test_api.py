@@ -542,10 +542,15 @@ def test_every_action_returns_player_snapshot():
     assert r.status_code == 200, r.text
     p = r.json()["data"]["player"]
     for key in ("level", "xp", "xp_to_next_level", "hp", "max_hp", "gold",
-                "kills", "quests_completed", "location", "alive",
+                "kills", "quests_completed", "location", "alive", "inventory",
+                "equipped",
                 "cooldown_seconds_remaining"):
         assert key in p, f"player snapshot missing {key}"
     assert p["level"] == 1 and p["location"] == "riverside_village" and p["alive"] is True
+    # snapshot carries the full inventory (potions et al) + equipped slots
+    assert any(i["item_id"] == "itm_healing_potion" for i in p["inventory"])
+    assert p["equipped"]["weapon"]["item_id"] == "itm_rusty_sword"
+    assert p["equipped"]["armor"] is None
     # snapshot tracks progress: kill XP shows up inline without /status
     _set_hp_and_ready(reg["agent_id"], 25)
     assert c.post("/api/v1/actions", json={"action": "move", "params": {"to": "oakhollow_forest"}}, headers=h).status_code == 200
@@ -554,6 +559,26 @@ def test_every_action_returns_player_snapshot():
     atk = c.post("/api/v1/actions", json={"action": "attack", "params": {"target_id": mid}}, headers=h).json()["data"]
     assert atk["player"]["xp"] == atk["xp_gained"] or atk["player"]["level"] > 1
     assert atk["player"]["location"] == "oakhollow_forest"
+    # snapshot tracks gear inline: buy + equip shows up without /status
+    _move(c, h, reg["agent_id"], "riverside_village")
+    _talk(c, h, reg["agent_id"], "npc_armorer_sella")
+    _set_gold(reg["agent_id"], 1000)
+    bought = _buy(c, h, reg["agent_id"], "npc_armorer_sella", "itm_chainmail")
+    # chainmail needs level 3...
+    assert bought.json()["detail"]["error"]["code"] == "QUEST_LOCKED"
+    bought2 = _buy(c, h, reg["agent_id"], "npc_armorer_sella", "itm_cloth_garb")
+    assert bought2.status_code == 200, bought2.text
+    assert any(i["item_id"] == "itm_cloth_garb" for i in bought2.json()["data"]["player"]["inventory"])
+    _set_hp_and_ready(reg["agent_id"], 25)
+    eq = c.post("/api/v1/actions", json={"action": "equip_item",
+                "params": {"item_id": "itm_cloth_garb"}}, headers=h).json()["data"]
+    assert eq["player"]["equipped"]["armor"]["item_id"] == "itm_cloth_garb"
+    assert eq["player"]["equipped"]["weapon"]["item_id"] == "itm_rusty_sword"
+    # ...and selling it drops it from the snapshot
+    sold = _sell(c, h, reg["agent_id"], "npc_armorer_sella", "itm_cloth_garb")
+    assert sold.status_code == 200, sold.text
+    assert not any(i["item_id"] == "itm_cloth_garb" for i in sold.json()["data"]["player"]["inventory"])
+    assert sold.json()["data"]["player"]["equipped"]["armor"] is None
 
 
 def _talk(c, h, agent_id, npc):

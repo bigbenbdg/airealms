@@ -177,6 +177,16 @@ def _require_giver_presence(agent, quest_id: str, purpose: str):
             f"(talk_to_npc), then {purpose}.")
 
 
+def _equipped_snapshot(agent) -> dict:
+    """Equipped gear split by slot: weapon (+ATK bonus) and armor (+DEF).
+    Legacy armor (already consumed into max HP) counts via kind/equipped."""
+    inv = load_json(agent.inventory, [])
+    weapon = next((i for i in inv if i.get("equipped") and i.get("bonus")), None)
+    armor = next((i for i in inv if i.get("equipped")
+                  and (i.get("defense") or i.get("kind") == "armor")), None)
+    return {"weapon": weapon, "armor": armor}
+
+
 def agent_public(a: Agent):
     return {"agent_id": a.id, "name": a.name, "bio": a.bio, "level": a.level,
             "hp": a.hp, "max_hp": a.max_hp,
@@ -387,6 +397,8 @@ async def do_action(body: dict, request: Request, agent: Agent = Depends(get_age
         "hp": db_agent.hp, "max_hp": db_agent.max_hp, "gold": db_agent.gold,
         "kills": db_agent.kills, "quests_completed": db_agent.quests_completed,
         "location": db_agent.location, "alive": db_agent.alive,
+        "inventory": load_json(db_agent.inventory, []),
+        "equipped": _equipped_snapshot(db_agent),
         "cooldown_seconds_remaining": cooldown_remaining(db_agent),
     }
     db.commit()
