@@ -216,6 +216,8 @@ def agent_public(a: Agent):
             "attack": combat["attack"], "defense": combat["defense"],
             "location_public": a.location, "kills": a.kills,
             "quests_completed": a.quests_completed, "alive": a.alive,
+            "model": getattr(a, "model", "") or None,
+            "provider": getattr(a, "provider", "") or None,
             "registered_at": a.registered_at.isoformat() if a.registered_at else None}
 
 
@@ -254,12 +256,14 @@ def register(body: dict, request: Request, db: Session = Depends(get_db)):
     name = str(body.get("display_name", "Nameless Wanderer"))[:40]
     bio = str(body.get("bio", ""))[:200]
     owner = str(body.get("owner_contact", ""))[:120]
+    model = str(body.get("model", "") or "")[:80].strip()
+    provider = str(body.get("provider", "") or "")[:80].strip()
     if not name.strip():
         err("INVALID_PARAMS", "display_name must not be empty.")
     agent_id = "agt_" + secrets.token_hex(4)
     api_key = "sk_live_" + secrets.token_hex(16)
     a = Agent(id=agent_id, api_key=api_key, name=name.strip(), bio=bio,
-              owner_contact=owner, location="riverside_village",
+              owner_contact=owner, model=model, provider=provider, location="riverside_village",
               inventory=json.dumps(STARTER_INVENTORY))
     db.add(a)
     seed_monsters(db)
@@ -292,6 +296,8 @@ def status(agent: Agent = Depends(get_agent), db: Session = Depends(get_db)):
         "xp_to_next_level": xp_for_level(agent.level), "hp": agent.hp, "max_hp": agent.max_hp,
         "combat": player_combat_stats(agent),
         "stats": load_json(agent.stats, {}), "gold": agent.gold, "location": agent.location,
+        "model": getattr(agent, "model", "") or None,
+        "provider": getattr(agent, "provider", "") or None,
         "status_effects": [], "inventory": inv,
         "active_quests": [{"quest_id": q["quest_id"], "title": q["title"],
                            "progress": _quest_progress(inv, QUESTS[q["quest_id"]]),
@@ -347,6 +353,8 @@ def zone_snapshot(db: Session, loc):
         agents.append({"agent_id": a.id, "name": a.name, "level": a.level,
                        "hp": a.hp, "max_hp": a.max_hp,
                        "attack": combat["attack"], "defense": combat["defense"],
+                       "model": getattr(a, "model", "") or None,
+                       "provider": getattr(a, "provider", "") or None,
                        "alive": a.alive})
     monsters = []
     for m in db.query(Monster).filter(Monster.location == loc["id"], Monster.alive == True).all():  # noqa: E712
@@ -965,7 +973,9 @@ def leaderboard(sort: str = Query(default="level"), db: Session = Depends(get_db
            "quests": Agent.quests_completed}.get(sort, Agent.level)
     rows = db.query(Agent).order_by(desc(key)).limit(100).all()
     board = [{"rank": i + 1, "agent_id": a.id, "name": a.name, "level": a.level,
-              "gold": a.gold, "kills": a.kills, "quests": a.quests_completed} for i, a in enumerate(rows)]
+              "gold": a.gold, "kills": a.kills, "quests": a.quests_completed,
+              "model": getattr(a, "model", "") or None,
+              "provider": getattr(a, "provider", "") or None} for i, a in enumerate(rows)]
     return ok({"leaderboard": board}, f"Top agents by {sort}.")
 
 

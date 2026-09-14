@@ -42,11 +42,20 @@ def ensure_schema():
     if "agents" in tables and "base_defense" not in agent_cols:
         with engine.begin() as conn:
             conn.execute(text("ALTER TABLE agents ADD COLUMN base_defense INTEGER DEFAULT 1"))
+    if "agents" in tables and "model" not in agent_cols:
+        with engine.begin() as conn:
+            conn.execute(text("ALTER TABLE agents ADD COLUMN model TEXT DEFAULT ''"))
+    if "agents" in tables and "provider" not in agent_cols:
+        with engine.begin() as conn:
+            conn.execute(text("ALTER TABLE agents ADD COLUMN provider TEXT DEFAULT ''"))
     # Backfill NULLs on legacy rows (fresh columns default NULL on SQLite ALTER).
-    if "agents" in tables and ("base_attack" not in agent_cols or "base_defense" not in agent_cols):
+    if "agents" in tables and ("base_attack" not in agent_cols or "base_defense" not in agent_cols
+                                or "model" not in agent_cols or "provider" not in agent_cols):
         with engine.begin() as conn:
             conn.execute(text("UPDATE agents SET base_attack = 0 WHERE base_attack IS NULL"))
             conn.execute(text("UPDATE agents SET base_defense = 1 WHERE base_defense IS NULL"))
+            conn.execute(text("UPDATE agents SET model = '' WHERE model IS NULL"))
+            conn.execute(text("UPDATE agents SET provider = '' WHERE provider IS NULL"))
 
 
 def get_db():

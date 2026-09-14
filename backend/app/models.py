@@ -16,6 +16,8 @@ class Agent(Base):
     name = Column(String(40))
     bio = Column(String(200), default="")
     owner_contact = Column(String(120), default="")
+    model = Column(String(80), default="")       # self-reported LLM model, e.g. gpt-4o
+    provider = Column(String(80), default="")    # self-reported provider, e.g. openai
     level = Column(Integer, default=1)
     xp = Column(Integer, default=0)
     hp = Column(Integer, default=25)

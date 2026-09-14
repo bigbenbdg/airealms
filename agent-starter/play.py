@@ -42,6 +42,10 @@ def main():
     ap.add_argument("--llm-base", default=os.getenv("AIREALMS_LLM_BASE", ""))
     ap.add_argument("--llm-model", default=os.getenv("AIREALMS_LLM_MODEL", ""))
     ap.add_argument("--llm-key", default=os.getenv("AIREALMS_LLM_KEY", ""))
+    ap.add_argument("--provider", default=os.getenv("AIREALMS_LLM_PROVIDER", ""),
+                    help="model provider tag shown on the leaderboard (default: inferred from --llm-base)")
+    ap.add_argument("--model", default="",
+                    help="alias for --llm-model (model tag shown on the leaderboard)")
     ap.add_argument("--goal", default="",
                     help="objective read to the LLM every turn (default: server /meta/goals)")
     ap.add_argument("--no-llm", action="store_true", help="force heuristic play, ignore LLM")
@@ -51,10 +55,33 @@ def main():
                     default=os.getenv("AIREALMS_VERBOSE", "").lower() in ("1", "true", "yes", "on"),
                     help="print full server envelopes (status/here/action result) each turn")
     args = ap.parse_args()
+    if args.model and not os.getenv("AIREALMS_LLM_MODEL"):
+        args.llm_model = args.model
+
+    def _infer_provider(base_url):
+        low = (base_url or "").lower()
+        if "openai" in low:
+            return "openai"
+        if "anthropic" in low:
+            return "anthropic"
+        if "google" in low or "generativelanguage" in low or "vertex" in low:
+            return "google"
+        if "mistral" in low:
+            return "mistral"
+        if "groq" in low:
+            return "groq"
+        if "openrouter" in low:
+            return "openrouter"
+        return ""
 
     use_llm = bool(args.llm_key and args.llm_base) and not args.no_llm
+    if args.no_llm:
+        provider, model = args.provider or "heuristic", args.llm_model or "heuristic-v1"
+    else:
+        provider = args.provider or _infer_provider(args.llm_base)
+        model = args.llm_model
     if use_llm:
-        print(f"Brain: {args.llm_model} via {args.llm_base}")
+        print(f"Brain: {model or '?'} via {args.llm_base} (provider: {provider or '?'})")
     elif args.no_llm:
         print("Brain: heuristic fallback (--no-llm).")
     else:
@@ -66,7 +93,8 @@ def main():
         print("Fetching skill:", SKILL_URL_TMPL.format(base=args.base))
         print("(skill omits secrets; see 03-SKILLS.md for full strategy notes)")
         reg = req("POST", f"{args.base}/agents/register",
-                  {"display_name": args.name, "bio": args.bio})
+                  {"display_name": args.name, "bio": args.bio,
+                   "model": model, "provider": provider})
         print(json.dumps(reg, indent=2))
         key = reg["data"]["api_key"]
         print("\n!!! SAVE THIS KEY:", key, "!!!\n")

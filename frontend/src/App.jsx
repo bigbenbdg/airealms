@@ -220,6 +220,7 @@ function Chronicle({ events, onSelectName, board }) {
 }
 
 function Leaderboard({ rows, sort, setSort, onSelect, locations }) {
+  const modelLabel = (a) => [a.provider, a.model].filter(Boolean).join(" / ") || "—";
   return (
     <div>
       <div className="flex items-center gap-2 mb-3">
@@ -234,6 +235,7 @@ function Leaderboard({ rows, sort, setSort, onSelect, locations }) {
         <thead>
           <tr style={{ color: SLATE, textAlign: "left", fontSize: 12 }}>
             <th className="py-2 font-normal">Rank</th><th className="py-2 font-normal">Name</th>
+            <th className="py-2 font-normal">Model</th>
             <th className="py-2 font-normal">Level</th><th className="py-2 font-normal">Gold</th>
             <th className="py-2 font-normal">Kills</th><th className="py-2 font-normal">Quests</th>
           </tr>
@@ -243,6 +245,7 @@ function Leaderboard({ rows, sort, setSort, onSelect, locations }) {
             <tr key={a.agent_id} onClick={() => onSelect(a.agent_id)} style={{ borderTop: `1px solid ${HAIRLINE}`, cursor: "pointer" }}>
               <td className="py-3" style={{ color: SLATE }}>{a.rank ?? i + 1}</td>
               <td className="py-3" style={{ color: PARCHMENT, fontWeight: 600 }}>{a.name}</td>
+              <td className="py-3" style={{ color: SLATE, fontSize: 12 }}>{modelLabel(a)}</td>
               <td className="py-3" style={{ color: GOLD }}>{a.level}</td>
               <td className="py-3">{a.gold}</td><td className="py-3">{a.kills}</td><td className="py-3">{a.quests}</td>
             </tr>
@@ -619,6 +622,11 @@ function Roster({ rows, onSelect, locations }) {
               <span className="flex items-center gap-1"><Coins size={11} color={GOLD} />{a.gold}</span>
               <span className="flex items-center gap-1"><Sword size={11} />{a.kills} kills</span>
             </div>
+            {(a.provider || a.model) && (
+              <div style={{ fontSize: 11, color: SLATE, marginTop: 4 }}>
+                {[a.provider, a.model].filter(Boolean).join(" · ")}
+              </div>
+            )}
           </div>
         ))}
       </div>
@@ -637,6 +645,12 @@ function AgentPanel({ agent, onClose, locations }) {
       <div style={{ fontSize: 12, color: SLATE, margin: "6px 0 16px" }}>{agent.bio}</div>
       <Row label="Status" value={agent.alive ? "Alive" : "Deceased"} valueColor={agent.alive ? VERDIGRIS : BLOOD} />
       <Row label="Level" value={agent.level} valueColor={GOLD} />
+      {(agent.provider || agent.model) && (
+        <>
+          {agent.provider && <Row label="Provider" value={agent.provider} />}
+          {agent.model && <Row label="Model" value={agent.model} />}
+        </>
+      )}
       {(agent.attack !== undefined || agent.defense !== undefined) && (
         <Row label="ATK / DEF" value={`${agent.attack ?? "?"} / ${agent.defense ?? "?"}`} />
       )}

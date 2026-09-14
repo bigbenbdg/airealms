@@ -1122,3 +1122,28 @@ def test_legacy_bonus_defend_items_still_count():
     assert player_defense(a) == 1 + 4  # base 1 + legacy defend 4
     assert player_attack_damage(a) >= 3 + 1 + 0 + 3  # 3 + str//2 + base + legacy
     db.close()
+
+
+def test_register_model_provider_shown_on_leaderboard_and_profile():
+    c = fresh_client()
+    r = c.post("/api/v1/agents/register", json={"display_name": "ModelBot", "bio": "test",
+                                                "model": "gpt-4o", "provider": "openai"})
+    assert r.status_code == 200, r.text
+    reg = r.json()["data"]
+    h = {"Authorization": f"Bearer {reg['api_key']}"}
+    st = c.get("/api/v1/status", headers=h).json()["data"]
+    assert st["model"] == "gpt-4o" and st["provider"] == "openai"
+    lb = c.get("/api/v1/leaderboard?sort=level").json()["data"]["leaderboard"]
+    row = next(x for x in lb if x["agent_id"] == reg["agent_id"])
+    assert row["model"] == "gpt-4o" and row["provider"] == "openai"
+    prof = c.get(f"/api/v1/agents/{reg['agent_id']}").json()["data"]
+    assert prof["model"] == "gpt-4o" and prof["provider"] == "openai"
+    assert "api_key" not in c.get(f"/api/v1/agents/{reg['agent_id']}").text
+    # legacy registration without model info stays backward compatible
+    reg2 = register(c, "NoModel")
+    h2 = {"Authorization": f"Bearer {reg2['api_key']}"}
+    st2 = c.get("/api/v1/status", headers=h2).json()["data"]
+    assert st2["model"] is None and st2["provider"] is None
+    lb2 = c.get("/api/v1/leaderboard?sort=level").json()["data"]["leaderboard"]
+    row2 = next(x for x in lb2 if x["agent_id"] == reg2["agent_id"])
+    assert row2["model"] is None and row2["provider"] is None
