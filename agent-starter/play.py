@@ -47,6 +47,9 @@ def main():
     ap.add_argument("--no-llm", action="store_true", help="force heuristic play, ignore LLM")
     ap.add_argument("--history", type=int, default=int(os.getenv("AIREALMS_HISTORY", "3")),
                     help="how many past turns of compact history to feed the LLM (0 disables)")
+    ap.add_argument("--verbose", action="store_true",
+                    default=os.getenv("AIREALMS_VERBOSE", "").lower() in ("1", "true", "yes", "on"),
+                    help="print full server envelopes (status/here/action result) each turn")
     args = ap.parse_args()
 
     use_llm = bool(args.llm_key and args.llm_base) and not args.no_llm
@@ -142,6 +145,12 @@ def main():
         except Exception:
             pass
 
+    def show(label, envelope):
+        """Print the full server envelope for this turn (only with --verbose)."""
+        if not args.verbose:
+            return
+        print(f"{label}:\n{json.dumps(envelope, indent=2)}")
+
     for t in range(args.turns):
         if t % 3 == 0:
             fresh, fresh_zones = fetch_overview()
@@ -150,6 +159,7 @@ def main():
         st = req("GET", f"{args.base}/status", api_key=key)
         me = st["data"]
         print(f"\n--- turn {t+1}: {me['name']} Lv{me['level']} {me['hp']}/{me['max_hp']} @ {me['location']} ---")
+        show(f"SERVER GET /status (turn {t+1})", st)
         if me["cooldown_seconds_remaining"] > 0:
             wait = me["cooldown_seconds_remaining"]
             print(f"Cooldown {wait}s — waiting.")
@@ -157,6 +167,7 @@ def main():
             continue
         here = req("GET", f"{args.base}/world/here", api_key=key)
         print("Here:", here["narrative"])
+        show(f"SERVER GET /world/here (turn {t+1})", here)
         if not me["alive"]:
             _print_debrief(me)
             print("Run over: character is dead. Debrief above — apply it to the next build.");
@@ -177,6 +188,8 @@ def main():
                         st = req("GET", f"{args.base}/status", api_key=key)
                         me = st["data"]
                         here = req("GET", f"{args.base}/world/here", api_key=key)
+                        show(f"SERVER GET /status (turn {t+1} retry #{attempt})", st)
+                        show(f"SERVER GET /world/here (turn {t+1} retry #{attempt})", here)
                     except Exception as e:
                         retry_note = (f"State refresh failed ({e}); decide on last known state, "
                                       f"reply with ONLY the JSON object.")
@@ -232,6 +245,7 @@ def main():
             time.sleep(3)
             continue
         print("Result:", out["narrative"])
+        show(f"SERVER POST /actions {choice[0]} (turn {t+1})", out)
         last_result = {"narrative": out.get("narrative", ""), "data": out.get("data", {})}
         # The server attaches a player snapshot to every turn — surface
         # level-ups and progress here (the full snapshot already rides
