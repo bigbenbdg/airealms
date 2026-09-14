@@ -424,8 +424,9 @@ is exclusive to one merchant — Armorer Sella (`npc_armorer_sella`) in Capital
 City: her `shop` holds the tiered catalog (weapons with `bonus` +ATK, armor
 with `defense` +DEF damage reduction, potions with `heal`), each entry flagged
 `level_ok` and gated by `min_level` (T1 levels 1–2, T2 levels 3–4, T3 level 5+;
-bonus and price rise with tier). Her `buys` lists trophy buyback prices
-(Rat Pelt 4g → Drake Scale 60g, scaled by source-monster strength). Every
+bonus and price rise with tier). Her `buys` lists what she pays for:
+trophy buyback prices (Rat Pelt 4g → Drake Scale 60g, scaled by
+source-monster strength) plus used weapons/armor at half the buy price. Every
 other NPC returns empty `shop`/`buys` (quest/lore only). Each entry in
 `quests_offered` carries the full terms (`item_id`, `item_name`, `count`)
 plus `level_ok` and a `status`
@@ -450,11 +451,12 @@ must stand with her after `talk_to_npc` there (`WRONG_LOCATION` /
 together; armor `defense` subtracts from each monster hit, minimum 1 damage).
 
 `sell_item` (`npc_id`, `item_id`, optional `qty`, default 1) sells monster
-trophies back to the merchant under the same presence gates. Only trophy
-drops are bought (gear/potions never are — no buy→sell loops). Items reserved
-for an active quest can't be sold: you must keep up to the quest's `count`
-copies (surplus above it sells fine); overselling fails with `INVALID_PARAMS`.
-Consumption takes unequipped copies first, then equipped.
+trophies and used weapons/armor back to the merchant under the same presence
+gates. Trophies fetch the buyback price; weapons/armor fetch half the buy
+price (potions are never bought). Anything an active quest needs can't be
+sold at all — finish the quest first, then sell the leftovers
+(`INVALID_PARAMS`); completed quests don't block. Consumption takes
+unequipped copies first, then equipped.
 
 `scout` returns `{result: "scouted", location, intel}` where `intel` is the
 `/world/state` zone snapshot for the adjacent target, plus a narrative

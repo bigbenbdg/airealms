@@ -14,7 +14,7 @@ from .db import Base, engine, get_db, SessionLocal, ensure_schema
 from .models import Agent, Monster, GroundItem, WorldEvent, utcnow
 from .seed import (LOCATIONS, EDGES, NPCS, QUESTS, SHOP, STARTER_INVENTORY,
                    MERCHANT_ID, ARMORER_STOCK, MERCHANT_BUYBACK,
-                   merchant_npc, shop_for, buys_for, stock_spec,
+                   merchant_npc, shop_for, buys_for, stock_spec, sell_price,
                    seed_monsters, seed_ground, exits_from, loc_by_id, quest_brief, roll_drop,
                    MONSTER_DROPS, ground_item_props, danger_of, quests_at, monster_haunts,
                    monster_for_item)
@@ -623,10 +623,11 @@ def _apply_action(db, agent, action, params):
             who = f"{merch['name']} ({MERCHANT_ID})" if merch else "the merchant"
             err("TARGET_NOT_FOUND", f"'{nid or '???'}' doesn't trade. All commerce is exclusive "
                                     f"to {who} in {where}: talk_to_npc there, then sell_item.")
-        price = MERCHANT_BUYBACK.get(iid)
+        price = sell_price(iid)
         if price is None:
             err("TARGET_NOT_FOUND", f"{npc['name']} doesn't buy '{iid}'. She buys monster trophies "
-                                    f"(pelts, daggers, hides, essences, scales) — check talk_to_npc buys.")
+                                    f"(pelts, daggers, hides, essences, scales) and used weapons/armor "
+                                    f"(half the buy price) — check talk_to_npc buys.")
         if agent.location != npc["location"]:
             place = loc_by_id(npc["location"])
             pname = place["name"] if place else npc["location"]
@@ -638,21 +639,16 @@ def _apply_action(db, agent, action, params):
         have_qty = sum(i.get("qty", 0) for i in inv if i.get("item_id") == iid)
         if have_qty < qty:
             err("INVALID_PARAMS", f"You hold {have_qty}x '{iid}', can't sell {qty}.")
-        # Quest protection: active quests reserve up to `count` copies —
-        # only the surplus above the largest active need may be sold.
-        reserved = 0
-        reserving = None
+        # Quest block: anything an active quest needs can't be sold at all —
+        # finish the quest first, then the leftovers are fair game.
+        # (Completed quests don't block.)
         for q in quests:
             if q.get("done"):
                 continue
             spec = QUESTS.get(q.get("quest_id", ""))
             if spec and spec.get("item_id") == iid:
-                if spec["count"] > reserved:
-                    reserved, reserving = spec["count"], spec["title"]
-        sellable = have_qty - reserved
-        if qty > sellable:
-            err("INVALID_PARAMS", f"{qty}x is reserved for '{reserving}': you hold {have_qty}, "
-                                  f"the quest needs {reserved}. Sell at most {max(sellable, 0)}.")
+                err("INVALID_PARAMS", f"'{spec['item_name']}' is needed for your active quest "
+                                      f"'{spec['title']}': finish it first, then sell the rest.")
         # Consume unequipped copies first, then equipped (as with quest turn-ins).
         need = qty
         for item in sorted(inv, key=lambda i: bool(i.get("equipped"))):

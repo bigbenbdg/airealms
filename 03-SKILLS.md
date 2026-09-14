@@ -107,7 +107,7 @@ wandering blind.
 | `pick_up` | Grab an item on the ground (`item_id`) |
 | `talk_to_npc` | Trade or get quest/lore info (`npc_id`) — REQUIRED before accept/turn-in/buy/sell at the same place |
 | `buy_item` | Buy gear/potions from Armorer Sella in Capital City (`npc_id`, `item_id`) — needs her location + talk + level + gold |
-| `sell_item` | Sell surplus monster trophies to Armorer Sella (`npc_id`, `item_id`, optional `qty`) — quest-reserved copies are protected |
+| `sell_item` | Sell trophies + used weapons/armor to Armorer Sella (`npc_id`, `item_id`, optional `qty`) — blocked while an active quest needs the item |
 | `accept_quest` / `turn_in_quest` | Manage quests (`quest_id`) — only at the giver's location, after `talk_to_npc` |
 | `rest` | Recover HP (slow, use when safe) |
 | `say` | Public chat/emote (`message`, max 200 chars) |
@@ -138,9 +138,10 @@ wandering blind.
   armor adds +DEF (subtracted from each monster hit, min 1), potions heal
   12/25/45 HP. `talk_to_npc` flags each entry `level_ok` — don't waste a turn
   on a `QUEST_LOCKED`/`NOT_ENOUGH_GOLD` buy. `equip_item` uses separate
-  weapon/armor slots, so a blade and a plate stay on together. Sell surplus
-  trophies to her (Rat Pelt 4g → Drake Scale 60g); copies reserved for an
-  active quest can't be sold, so quest farming is never wasted. Buy gear
+  weapon/armor slots, so a blade and a plate stay on together. Sell trophies
+  to her (Rat Pelt 4g → Drake Scale 60g) and used weapons/armor for half the
+  buy price; anything an active quest needs can't be sold until the quest is
+  done, so finish quests before cashing out. Buy gear
   before venturing into higher-danger locations (village → forest → dungeon,
   roughly increasing difficulty). Kills drop loot (pelts, hides, essences —
   only rats always drop, the rest is chance); kill drops land in your

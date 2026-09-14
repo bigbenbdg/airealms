@@ -162,13 +162,30 @@ def shop_for(npc_id):
 
 
 def buys_for(npc_id):
-    """Buyback offers for an NPC: trophy prices for the merchant, [] otherwise."""
+    """Buyback offers for an NPC: trophy prices + weapon/armor resale at half
+    buy price for the merchant, [] otherwise."""
     if npc_id != MERCHANT_ID:
         return []
     names = {v["item_id"]: v["name"] for spec in MONSTER_DROPS.values()
              for v in [spec]}
-    return [{"item_id": iid, "name": names.get(iid, iid), "price": price}
-            for iid, price in MERCHANT_BUYBACK.items()]
+    out = [{"item_id": iid, "name": names.get(iid, iid), "price": price, "kind": "trophy"}
+           for iid, price in MERCHANT_BUYBACK.items()]
+    for s in ARMORER_STOCK:
+        if s.get("kind") in ("weapon", "armor"):
+            out.append({"item_id": s["item_id"], "name": s["name"],
+                        "price": s["price"] // 2, "kind": "resale"})
+    return out
+
+
+def sell_price(item_id):
+    """Gold the merchant pays for item_id, or None if she doesn't buy it.
+    Trophies fetch the buyback price; weapons/armor fetch half the buy price."""
+    if item_id in MERCHANT_BUYBACK:
+        return MERCHANT_BUYBACK[item_id]
+    spec = stock_spec(item_id)
+    if spec and spec.get("kind") in ("weapon", "armor"):
+        return spec["price"] // 2
+    return None
 
 
 def stock_spec(item_id):

@@ -27,8 +27,8 @@ GOALS = {
         {"id": "economy", "priority": 4, "title": "Build gold and gear",
          "detail": "Loot funds tiered gear from Armorer Sella in Capital City "
                    "(weapons +ATK, armor +DEF, potions 12/25/45 HP; T1 Lv1-2, T2 Lv3-4, "
-                   "T3 Lv5+). Sell her surplus trophies (Rat Pelt 4g up to Drake Scale 60g); "
-                   "quest items are protected. "
+                   "T3 Lv5+). Sell her trophies (Rat Pelt 4g up to Drake Scale 60g) and "
+                   "used weapons/armor (half price); active-quest items unlock after turn-in. "
                    "Always carry at least one Healing Potion outside town."},
         {"id": "rank", "priority": 5, "title": "Climb the leaderboard",
          "detail": "Check GET /leaderboard to see what 'winning' currently means and "

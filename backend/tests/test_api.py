@@ -698,10 +698,14 @@ def test_merchant_talk_shows_tiered_shop_and_buyback():
     assert all("level_ok" in s for s in shop)
     assert by_id["itm_dragonslayer"]["level_ok"] is False  # level 1 agent
     assert by_id["itm_short_sword"]["level_ok"] is True
-    # buyback table scales with monster strength
+    # buyback table scales with monster strength, plus gear resale at half price
     buys = {b["item_id"]: b["price"] for b in t["data"]["buys"]}
+    kinds = {b["item_id"]: b["kind"] for b in t["data"]["buys"]}
     assert buys["itm_rat_pelt"] == 4 and buys["itm_drake_scale"] == 60
     assert buys["itm_rat_pelt"] < buys["itm_wolf_pelt"] < buys["itm_troll_hide"] < buys["itm_drake_scale"]
+    assert kinds["itm_rat_pelt"] == "trophy"
+    assert buys["itm_short_sword"] == 30 and kinds["itm_short_sword"] == "resale"  # half of 60g
+    assert buys["itm_dragonslayer"] == 200  # half of 400g
     # old traders sell nothing anymore
     _move(c, h, reg["agent_id"], "riverside_village")
     t2 = _talk(c, h, reg["agent_id"], "npc_blacksmith")
@@ -778,25 +782,65 @@ def test_sell_trophies_quest_protected():
     # overselling what you hold fails
     short = _sell(c, h, reg["agent_id"], "npc_armorer_sella", "itm_rat_pelt", qty=1)
     assert short.json()["detail"]["error"]["code"] == "INVALID_PARAMS"
-    # quest items are reserved: accept ratcatcher (needs 3), hold exactly 3 -> blocked
+    # quest block: accept ratcatcher (needs pelts), hold a surplus of 5 -> any sale blocked
     _move(c, h, reg["agent_id"], "riverside_village")
     _talk(c, h, reg["agent_id"], "npc_blacksmith")
     _set_hp_and_ready(reg["agent_id"], 25)
     assert c.post("/api/v1/actions", json={"action": "accept_quest",
                   "params": {"quest_id": "q_ratcatcher"}}, headers=h).status_code == 200
-    _give_quest_items(reg["agent_id"], "itm_rat_pelt", 3, "Rat Pelt")
+    _give_quest_items(reg["agent_id"], "itm_rat_pelt", 5, "Rat Pelt")
     _move(c, h, reg["agent_id"], "capital_city")
     _talk(c, h, reg["agent_id"], "npc_armorer_sella")
     blocked = _sell(c, h, reg["agent_id"], "npc_armorer_sella", "itm_rat_pelt", qty=1)
     assert blocked.json()["detail"]["error"]["code"] == "INVALID_PARAMS"
-    assert "reserved" in blocked.json()["detail"]["error"]["message"]
-    # surplus above the quest need sells fine: hold 5, sell 2
-    _give_quest_items(reg["agent_id"], "itm_rat_pelt", 2, "Rat Pelt")
+    assert "active quest" in blocked.json()["detail"]["error"]["message"]
+    # finish the quest (consumes 3, leaves 2) -> leftovers sell fine
+    _move(c, h, reg["agent_id"], "riverside_village")
+    _talk(c, h, reg["agent_id"], "npc_blacksmith")  # check-in while holding the goods
+    _set_hp_and_ready(reg["agent_id"], 25)
+    assert c.post("/api/v1/actions", json={"action": "turn_in_quest",
+                  "params": {"quest_id": "q_ratcatcher"}}, headers=h).status_code == 200
+    _move(c, h, reg["agent_id"], "capital_city")
+    _talk(c, h, reg["agent_id"], "npc_armorer_sella")
+    before2 = c.get("/api/v1/status", headers=h).json()["data"]["gold"]
     ok = _sell(c, h, reg["agent_id"], "npc_armorer_sella", "itm_rat_pelt", qty=2)
     assert ok.status_code == 200, ok.text
-    left = [i for i in c.get("/api/v1/status", headers=h).json()["data"]["inventory"]
-            if i["item_id"] == "itm_rat_pelt"]
-    assert sum(i.get("qty", 0) for i in left) == 3
+    assert ok.json()["data"]["gold_gained"] == 8
+    st2 = c.get("/api/v1/status", headers=h).json()["data"]
+    assert st2["gold"] == before2 + 8
+    assert not any(i["item_id"] == "itm_rat_pelt" for i in st2["inventory"])
+
+
+def test_sell_gear_half_buy_price():
+    c = fresh_client()
+    reg = register(c, "Trader")
+    h = {"Authorization": f"Bearer {reg['api_key']}"}
+    _move(c, h, reg["agent_id"], "capital_city")
+    _talk(c, h, reg["agent_id"], "npc_armorer_sella")
+    _set_gold(reg["agent_id"], 1000)
+    assert _buy(c, h, reg["agent_id"], "npc_armorer_sella", "itm_short_sword").status_code == 200
+    assert _buy(c, h, reg["agent_id"], "npc_armorer_sella", "itm_cloth_garb").status_code == 200
+    # used weapons/armor resell for half the buy price (60 -> 30)
+    sold = _sell(c, h, reg["agent_id"], "npc_armorer_sella", "itm_short_sword")
+    assert sold.status_code == 200, sold.text
+    assert sold.json()["data"]["gold_gained"] == 30
+    st = c.get("/api/v1/status", headers=h).json()["data"]
+    assert st["gold"] == 1000 - 60 - 50 + 30
+    assert not any(i["item_id"] == "itm_short_sword" for i in st["inventory"])
+    # even equipped armor sells (auto-unequipped by the sale)
+    _set_hp_and_ready(reg["agent_id"], 25)
+    assert c.post("/api/v1/actions", json={"action": "equip_item",
+                  "params": {"item_id": "itm_cloth_garb"}}, headers=h).status_code == 200
+    sold2 = _sell(c, h, reg["agent_id"], "npc_armorer_sella", "itm_cloth_garb")
+    assert sold2.status_code == 200, sold2.text
+    assert sold2.json()["data"]["gold_gained"] == 25  # half of 50g
+    assert not any(i["item_id"] == "itm_cloth_garb"
+                   for i in c.get("/api/v1/status", headers=h).json()["data"]["inventory"])
+    # potions are never bought back
+    _set_hp_and_ready(reg["agent_id"], 25)
+    no = c.post("/api/v1/actions", json={"action": "sell_item",
+                "params": {"npc_id": "npc_armorer_sella", "item_id": "itm_greater_potion", "qty": 1}}, headers=h)
+    assert no.json()["detail"]["error"]["code"] == "TARGET_NOT_FOUND"
 
 
 def test_equip_weapon_and_armor_slots_with_defense():
