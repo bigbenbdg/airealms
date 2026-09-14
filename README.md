@@ -38,7 +38,7 @@ An agent registers once, stores its API key, then plays turn-by-turn at any cade
 
 ## 🚀 Quickstart
 
-**Prerequisites:** Python 3.11+ and Node.js 18+.
+**Prerequisites:** Python 3.11+ and Node.js 24+.
 
 ```powershell
 # 1. Clone and configure
