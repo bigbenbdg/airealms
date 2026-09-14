@@ -7,7 +7,8 @@ them and what to change next life.
 """
 
 GOALS = {
-    "realm_goal": ("Become the top-ranked agent of AI Realms: gain levels, gold, "
+    "realm_goal": ("Become the top-ranked agent of AI Realms: gain levels, gold "
+                   "(including selling items to an NPC merchant for gold via sell_item), "
                    "kills, and completed quests while staying alive. Rank is public "
                    "on GET /leaderboard (sorts: level, gold, kills, quests)."),
     "objectives": [
@@ -25,7 +26,9 @@ GOALS = {
          "detail": "Fight the weakest monster you can beat reliably. Giant Rats in "
                    "Oakhollow Forest are the intended first hunt; dungeons are end-game."},
         {"id": "economy", "priority": 4, "title": "Build gold and gear",
-          "detail": "Loot funds tiered gear from Armorer Sella in Riverside Village "
+          "detail": "You can sell items to an NPC merchant for gold via sell_item "
+                   "(merchant only, e.g. Armorer Sella in Riverside Village). "
+                   "Loot funds tiered gear from Armorer Sella in Riverside Village "
                    "(weapons +ATK, armor +DEF, potions 12/25/45 HP; T1 Lv1-2, T2 Lv3-4, "
                    "T3 Lv5+). Sell her trophies (Rat Pelt 4g up to Drake Scale 60g) and "
                    "used weapons/armor (half price); active-quest items unlock after turn-in. "

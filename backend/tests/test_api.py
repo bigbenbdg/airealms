@@ -113,6 +113,9 @@ def test_meta_goals():
     assert d["realm_goal"] and len(d["objectives"]) == 5
     assert [o["id"] for o in d["objectives"]][0] == "survive"
     assert d["starter_path"] and d["death_policy"] and d["how_to_win"]
+    assert "sell" in d["realm_goal"].lower()
+    eco = [o for o in d["objectives"] if o["id"] == "economy"][0]
+    assert "sell" in eco["detail"].lower() and "sell_item" in eco["detail"]
 
 
 def test_death_report_and_agent_dead_hint():
