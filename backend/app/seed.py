@@ -357,7 +357,7 @@ def quests_at(location_id):
             out.append({"quest_id": qid, "title": q["title"], "kind": q.get("kind", "collect"),
                         "item_id": q["item_id"], "item_name": q["item_name"],
                         "count": q["count"], "xp": q["xp"], "gold": q["gold"],
-                        "min_level": q.get("min_level", 1),
+                        "min_level": q.get("min_level", 1), "repeatable": False,
                         "giver": giver["name"], "brief": quest_brief(qid)})
     return out
 

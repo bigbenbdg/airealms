@@ -432,6 +432,7 @@ def test_world_state_full_place_intel():
     assert sella["can_trade"] is True and sella["has_quest"] is False
     rq = next(q for q in by_id["riverside_village"]["quests"] if q["quest_id"] == "q_ratcatcher")
     assert rq["item_id"] == "itm_rat_pelt" and rq["item_name"] == "Rat Pelt" and rq["min_level"] == 1
+    assert rq["repeatable"] is False
     assert "Rat Pelt" in rq["brief"] and "Giant Rat" in rq["brief"]
     assert "target" not in rq
     assert rq["giver"] == "Old Toran"
@@ -597,6 +598,9 @@ def test_npc_notices_quest_state_and_suggests_other_work():
     t1 = _talk(c, h, reg["agent_id"], "npc_blacksmith")
     assert "Bring 3x Rat Pelt" in t1["narrative"]
     assert t1["data"]["quests_offered"][0]["status"] == "available"
+    # one-time nature is explicit: narrative pitch + repeatable flag
+    assert "One-time" in t1["narrative"]
+    assert t1["data"]["quests_offered"][0]["repeatable"] is False
     # accepted: NPC notices progress and hints where the drops come from
     _set_hp_and_ready(reg["agent_id"], 25)
     assert c.post("/api/v1/actions", json={"action": "accept_quest", "params": {"quest_id": "q_ratcatcher"}}, headers=h).status_code == 200

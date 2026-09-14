@@ -777,9 +777,11 @@ def _apply_action(db, agent, action, params):
                 status, note = "locked", (f"'{spec['title']}' [{qid}] needs level {spec.get('min_level', 1)} — "
                                           f"come back stronger. ")
             else:
-                status, note = "available", f"{spec['title']} [{qid}]: {quest_brief(qid)} "
+                status, note = "available", f"{spec['title']} [{qid}]: {quest_brief(qid)} " \
+                    f"(One-time: completable once per character.) "
             lines.append(note)
             offers.append({"quest_id": qid, **spec, "level_ok": level_ok,
+                           "repeatable": False,
                            "completed": status == "completed", "status": status})
         # Point at other work when this NPC has nothing new for the player.
         if all(o["status"] != "available" for o in offers):

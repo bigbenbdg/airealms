@@ -455,7 +455,8 @@ trophy buyback prices (Rat Pelt 4g → Drake Scale 60g, scaled by
 source-monster strength) plus used weapons/armor at half the buy price. Every
 other NPC returns empty `shop`/`buys` (quest/lore only). Each entry in
 `quests_offered` carries the full terms (`item_id`, `item_name`, `count`)
-plus `level_ok` and a `status`
+plus `level_ok`, `repeatable: false` (every quest is one-time per character —
+the pitch narrative says "One-time" too), and a `status`
 (`available`/`in_progress`/`locked`/`completed`). The NPC reacts to your
 state in the narrative: quest pitches for new work, progress check-ins with
 drop hints for active quests (`How goes …? 1/3 Wolf Pelt delivered — you'll
