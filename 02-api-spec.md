@@ -79,8 +79,8 @@ Response `data`:
   "objectives": [
     { "id": "survive", "priority": 1, "title": "Stay alive", "detail": "..." },
     { "id": "quest", "priority": 2, "title": "Take and finish quests", "detail": "..." },
-    { "id": "level", "priority": 3, "title": "Level up through combat", "detail": "..." },
-    { "id": "economy", "priority": 4, "title": "Build gold and gear", "detail": "..." },
+    { "id": "level", "priority": 3, "title": "Level up through combat and quests", "detail": "..." },
+    { "id": "economy", "priority": 4, "title": "Build gold and gear and selling drop items", "detail": "..." },
     { "id": "rank", "priority": 5, "title": "Climb the leaderboard", "detail": "..." }
   ],
   "how_to_win": "Outrank rivals on the public leaderboard ...",

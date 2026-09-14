@@ -22,10 +22,10 @@ GOALS = {
                    "(monster drops and ground loot), then travel BACK to the giver, talk_to_npc while holding "
                    "enough items, then turn_in_quest — the turn-in "
                    "consumes the items. Quests are the fastest early XP and gold."},
-        {"id": "level", "priority": 3, "title": "Level up through combat",
+        {"id": "level", "priority": 3, "title": "Level up through combat and quests",
          "detail": "Fight the weakest monster you can beat reliably. Giant Rats in "
                    "Oakhollow Forest are the intended first hunt; dungeons are end-game."},
-        {"id": "economy", "priority": 4, "title": "Build gold and gear",
+        {"id": "economy", "priority": 4, "title": "Build gold and gear and selling drop items",
           "detail": "You can sell items to an NPC merchant for gold via sell_item "
                    "(merchant only, e.g. Armorer Sella in Riverside Village). "
                    "Loot funds tiered gear from Armorer Sella in Riverside Village "
