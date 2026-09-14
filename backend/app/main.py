@@ -832,10 +832,16 @@ def _apply_action(db, agent, action, params):
             err("TARGET_NOT_FOUND", f"Unknown quest '{qid}'.")
         existing = next((q for q in quests if q["quest_id"] == qid), None)
         if existing and existing.get("done"):
-            err("INVALID_PARAMS", f"'{spec['title']}' is already completed and cannot be repeated. "
-                                  f"Each quest can be finished once per character.")
+            giver = _giver_npc(qid)
+            who = giver["name"] if giver else "The quest giver"
+            err("INVALID_PARAMS", f"{who} shakes their head: \"{spec['title']}\" is already completed — "
+                                  f"that work only ever needed doing once, and each quest can be taken "
+                                  f"only once per character. Talk to me (talk_to_npc) for new work instead.")
         if existing:
-            err("INVALID_PARAMS", "Quest already accepted.")
+            giver = _giver_npc(qid)
+            who = giver["name"] if giver else "The quest giver"
+            err("INVALID_PARAMS", f"{who} pats your pack: you're already carrying '{spec['title']}' — "
+                                  f"there's no taking it twice. Finish it and turn it in instead.")
         need = spec.get("min_level", 1)
         if agent.level < need:
             err("QUEST_LOCKED", f"'{spec['title']}' requires level {need} (you are level {agent.level}). "

@@ -519,11 +519,12 @@ def test_completed_quest_flagged_and_not_repeatable():
     assert len(st["completed_quests"]) == 1
     assert st["completed_quests"][0]["quest_id"] == "q_ratcatcher"
     assert st["completed_quests"][0]["completed_at"]
-    # re-accept is refused as completed, not merely "accepted"
+    # re-accept is refused as completed, not merely "accepted" — NPC says so explicitly
     _set_hp_and_ready(reg["agent_id"], 25)
     again = c.post("/api/v1/actions", json={"action": "accept_quest", "params": {"quest_id": "q_ratcatcher"}}, headers=h)
     body = again.json()["detail"]
     assert body["error"]["code"] == "INVALID_PARAMS" and "already completed" in body["error"]["message"]
+    assert "only once" in body["error"]["message"] and "Old Toran" in body["error"]["message"]
     # re-turn-in is refused too
     _set_hp_and_ready(reg["agent_id"], 25)
     again2 = c.post("/api/v1/actions", json={"action": "turn_in_quest", "params": {"quest_id": "q_ratcatcher"}}, headers=h)
@@ -604,6 +605,12 @@ def test_npc_notices_quest_state_and_suggests_other_work():
     # accepted: NPC notices progress and hints where the drops come from
     _set_hp_and_ready(reg["agent_id"], 25)
     assert c.post("/api/v1/actions", json={"action": "accept_quest", "params": {"quest_id": "q_ratcatcher"}}, headers=h).status_code == 200
+    # taking it twice is refused in the NPC's own voice
+    _set_hp_and_ready(reg["agent_id"], 25)
+    twice = c.post("/api/v1/actions", json={"action": "accept_quest", "params": {"quest_id": "q_ratcatcher"}}, headers=h)
+    assert twice.json()["detail"]["error"]["code"] == "INVALID_PARAMS"
+    assert "already carrying" in twice.json()["detail"]["error"]["message"]
+    assert "twice" in twice.json()["detail"]["error"]["message"]
     t2 = _talk(c, h, reg["agent_id"], "npc_blacksmith")
     assert "How goes" in t2["narrative"] and "Oakhollow Forest" in t2["narrative"]
     assert "Rat Pelt" in t2["narrative"]

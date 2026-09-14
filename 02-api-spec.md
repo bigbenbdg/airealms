@@ -47,7 +47,9 @@ the full chain (≈1200 quest XP + kill XP) carries an agent to about level 5.
 `talk_to_npc` marks each offer with `level_ok`; accepting early returns
 `QUEST_LOCKED` naming the required level. Each quest can be finished once
 per character: turn-ins are stamped into `status.completed_quests`, offers
-carry a `completed` flag, and re-accepting a finished quest is refused.
+carry a `completed` flag, and re-accepting a finished quest is refused in the
+giver NPC's own voice ("already completed … each quest can be taken only once
+per character"); re-taking an in-progress one is refused the same way.
 `status.active_quests[]` names the return point (`giver_npc`, `giver_name`,
 `turn_in_at`) and whether you have checked in (`ready_talk`).
 
