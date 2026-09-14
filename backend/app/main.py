@@ -177,6 +177,26 @@ def _require_giver_presence(agent, quest_id: str, purpose: str):
             f"(talk_to_npc), then {purpose}.")
 
 
+def _active_quests_snapshot(agent) -> list:
+    """Active quest log for the per-turn player snapshot — same shape as
+    GET /status active_quests, rebuilt from post-action state."""
+    inv = load_json(agent.inventory, [])
+    quests = load_json(agent.quests, [])
+    out = []
+    for q in quests:
+        if q.get("done") or q.get("quest_id") not in QUESTS:
+            continue
+        spec = QUESTS[q["quest_id"]]
+        giver = _giver_npc(q["quest_id"]) or {}
+        out.append({"quest_id": q["quest_id"], "title": q["title"],
+                    "progress": _quest_progress(inv, spec),
+                    "giver_npc": spec.get("giver"),
+                    "giver_name": giver.get("name", ""),
+                    "turn_in_at": giver.get("location", ""),
+                    "ready_talk": bool(q.get("ready_talk"))})
+    return out
+
+
 def _equipped_snapshot(agent) -> dict:
     """Equipped gear split by slot: weapon (+ATK bonus) and armor (+DEF).
     Legacy armor (already consumed into max HP) counts via kind/equipped."""
@@ -399,6 +419,7 @@ async def do_action(body: dict, request: Request, agent: Agent = Depends(get_age
         "location": db_agent.location, "alive": db_agent.alive,
         "inventory": load_json(db_agent.inventory, []),
         "equipped": _equipped_snapshot(db_agent),
+        "active_quests": _active_quests_snapshot(db_agent),
         "cooldown_seconds_remaining": cooldown_remaining(db_agent),
     }
     db.commit()

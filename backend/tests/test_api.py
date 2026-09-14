@@ -543,7 +543,7 @@ def test_every_action_returns_player_snapshot():
     p = r.json()["data"]["player"]
     for key in ("level", "xp", "xp_to_next_level", "hp", "max_hp", "gold",
                 "kills", "quests_completed", "location", "alive", "inventory",
-                "equipped",
+                "equipped", "active_quests",
                 "cooldown_seconds_remaining"):
         assert key in p, f"player snapshot missing {key}"
     assert p["level"] == 1 and p["location"] == "riverside_village" and p["alive"] is True
@@ -692,6 +692,41 @@ def test_move_announces_every_npc_in_map():
     cave = _move(c, h, reg["agent_id"], "deep_cave")
     assert cave["data"]["npcs"] == []
     assert "No NPCs here" in cave["narrative"]
+
+
+def test_snapshot_carries_active_quests():
+    c = fresh_client()
+    reg = register(c, "QuestTracker")
+    h = {"Authorization": f"Bearer {reg['api_key']}"}
+    # fresh: no active quests in the snapshot
+    _set_hp_and_ready(reg["agent_id"], 25)
+    empty = c.post("/api/v1/actions", json={"action": "say",
+                   "params": {"message": "hi"}}, headers=h).json()["data"]
+    assert empty["player"]["active_quests"] == []
+    # accept: quest appears inline with progress + return point
+    _talk(c, h, reg["agent_id"], "npc_blacksmith")
+    _set_hp_and_ready(reg["agent_id"], 25)
+    acc = c.post("/api/v1/actions", json={"action": "accept_quest",
+                 "params": {"quest_id": "q_ratcatcher"}}, headers=h).json()["data"]
+    (q,) = acc["player"]["active_quests"]
+    assert q["quest_id"] == "q_ratcatcher" and q["progress"] == "0/3 Rat Pelt delivered"
+    assert q["turn_in_at"] == "riverside_village" and q["giver_npc"] == "npc_blacksmith"
+    assert q["ready_talk"] is False
+    # progress updates inline as loot lands: 2 pelts -> 2/3 without /status
+    _give_quest_items(reg["agent_id"], "itm_rat_pelt", 2, "Rat Pelt")
+    _set_hp_and_ready(reg["agent_id"], 25)
+    prog = c.post("/api/v1/actions", json={"action": "say",
+                  "params": {"message": "hunting"}}, headers=h).json()["data"]
+    assert prog["player"]["active_quests"][0]["progress"] == "2/3 Rat Pelt delivered"
+    # turn-in clears it from the snapshot
+    _talk(c, h, reg["agent_id"], "npc_blacksmith")  # check-in while holding... still short
+    _give_quest_items(reg["agent_id"], "itm_rat_pelt", 1, "Rat Pelt")
+    _talk(c, h, reg["agent_id"], "npc_blacksmith")  # check-in with the full stack
+    _set_hp_and_ready(reg["agent_id"], 25)
+    done = c.post("/api/v1/actions", json={"action": "turn_in_quest",
+                  "params": {"quest_id": "q_ratcatcher"}}, headers=h).json()["data"]
+    assert done["player"]["active_quests"] == []
+    assert done["player"]["quests_completed"] == 1
 
 
 def _set_gold(agent_id, gold):

@@ -381,9 +381,10 @@ with `narrative`: `"You swing your rusty sword at the Forest Wolf, landing a sol
 
 Every action response also carries a compact `player` snapshot — level, XP,
 HP, gold, kills, quest counts, location, full `inventory` (potions, trophies,
-gear with bonuses), `equipped` weapon/armor slots, and remaining cooldown —
-so the brain sees progress (including level-ups and gear changes) inline
-without a separate `/status` call:
+gear with bonuses), `equipped` weapon/armor slots, `active_quests` (progress,
+return point, check-in state), and remaining cooldown — so the brain sees
+progress (including level-ups and gear changes) inline without a separate
+`/status` call:
 ```json
 "player": {
   "level": 2, "xp": 35, "xp_to_next_level": 400,
@@ -401,6 +402,12 @@ without a separate `/status` call:
                 "equipped": true, "bonus": 3 },
     "armor": null
   },
+  "active_quests": [
+    { "quest_id": "q_ratcatcher", "title": "The Ratcatcher's Request",
+      "progress": "2/3 Rat Pelt delivered", "giver_npc": "npc_blacksmith",
+      "giver_name": "Old Toran", "turn_in_at": "riverside_village",
+      "ready_talk": false }
+  ],
   "cooldown_seconds_remaining": 5
 }
 ```
