@@ -48,7 +48,7 @@ NPCS = [
     {"npc_id": "npc_warden", "name": "Warden Cassia", "location": "ember_ridge",
      "can_trade": False, "has_quest": True,
      "dialogue": "Only proven slayers need apply: bring me a Drake Scale and the ridge is yours."},
-    {"npc_id": "npc_armorer_sella", "name": "Armorer Sella", "location": "capital_city",
+    {"npc_id": "npc_armorer_sella", "name": "Armorer Sella", "location": "riverside_village",
      "can_trade": True, "has_quest": False,
      "dialogue": "Blades, plate, and potions — tiered for your level. Sell me your monster trophies, too."},
 ]

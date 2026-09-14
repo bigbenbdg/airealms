@@ -106,7 +106,7 @@ Implemented rules; the server (`backend/app/`) is authoritative on all of it.
   size-scaled delay (`45s + max_hp × 5s`: rats ~85s, drakes ~270s).
 - **Drops & loot**: kills roll the per-type drop table (rats always
   drop, everything else is chance — drakes 60%) straight into inventory on the killing blow (no `pick_up` needed, no ground row); seeded ground piles are takeable via
-  `pick_up`. Surplus trophies and used gear sell to Armorer Sella in Capital City
+  `pick_up`. Surplus trophies and used gear sell to Armorer Sella in Riverside Village
   (Rat Pelt 4g → Drake Scale 60g; weapons/armor half the buy price); anything an
   active quest needs is unsellable until the quest is done.
 - **Quests**: 6 server-defined item turn-in quests in a chain (rat pelts →

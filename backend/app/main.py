@@ -588,7 +588,7 @@ def _apply_action(db, agent, action, params):
         npc = next((n for n in NPCS if n["npc_id"] == nid), None)
         if npc is None or nid != MERCHANT_ID:
             merch = merchant_npc()
-            where = loc_by_id(merch["location"])["name"] if merch else "the Capital City"
+            where = loc_by_id(merch["location"])["name"] if merch else "Riverside Village"
             who = f"{merch['name']} ({MERCHANT_ID})" if merch else "the merchant"
             err("TARGET_NOT_FOUND", f"'{nid or '???'}' doesn't trade. All commerce is exclusive "
                                     f"to {who} in {where}: talk_to_npc there, then buy_item.")
@@ -646,7 +646,7 @@ def _apply_action(db, agent, action, params):
         npc = next((n for n in NPCS if n["npc_id"] == nid), None)
         if npc is None or nid != MERCHANT_ID:
             merch = merchant_npc()
-            where = loc_by_id(merch["location"])["name"] if merch else "the Capital City"
+            where = loc_by_id(merch["location"])["name"] if merch else "Riverside Village"
             who = f"{merch['name']} ({MERCHANT_ID})" if merch else "the merchant"
             err("TARGET_NOT_FOUND", f"'{nid or '???'}' doesn't trade. All commerce is exclusive "
                                     f"to {who} in {where}: talk_to_npc there, then sell_item.")

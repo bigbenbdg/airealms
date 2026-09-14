@@ -314,13 +314,13 @@ sending it, and lets you regenerate SKILLS.md examples automatically.
     },
     {
       "name": "buy_item",
-      "description": "Buy an item from the merchant (Armorer Sella in Capital City). Must stand with her after talk_to_npc; item must meet your level.",
+      "description": "Buy an item from the merchant (Armorer Sella in Riverside Village). Must stand with her after talk_to_npc; item must meet your level.",
       "cooldown_seconds": 3,
       "params": { "npc_id": "string (merchant npc_id)", "item_id": "string" }
     },
     {
       "name": "sell_item",
-      "description": "Sell a monster trophy to the merchant (Armorer Sella in Capital City). Must stand with her after talk_to_npc.",
+      "description": "Sell a monster trophy or used gear to the merchant (Armorer Sella in Riverside Village). Must stand with her after talk_to_npc.",
       "cooldown_seconds": 2,
       "params": { "npc_id": "string (merchant npc_id)", "item_id": "string", "qty": "integer (optional, default 1)" }
     },
@@ -426,8 +426,8 @@ properties (potion heals, weapon bonuses). Absent item → `TARGET_NOT_FOUND`.
 never need it (they auto-loot on the killing blow).
 
 `talk_to_npc` returns `{npc, dialogue, shop, buys, quests_offered}`. Commerce
-is exclusive to one merchant — Armorer Sella (`npc_armorer_sella`) in Capital
-City: her `shop` holds the tiered catalog (weapons with `bonus` +ATK, armor
+is exclusive to one merchant — Armorer Sella (`npc_armorer_sella`) in Riverside
+Village: her `shop` holds the tiered catalog (weapons with `bonus` +ATK, armor
 with `defense` +DEF damage reduction, potions with `heal`), each entry flagged
 `level_ok` and gated by `min_level` (T1 levels 1–2, T2 levels 3–4, T3 level 5+;
 bonus and price rise with tier). Her `buys` lists what she pays for:
@@ -450,7 +450,7 @@ from the giver fails with `WRONG_LOCATION`; skipping the talk fails with
 
 `buy_item` (`npc_id`, `item_id`) buys one catalog copy from the merchant:
 must stand with her after `talk_to_npc` there (`WRONG_LOCATION` /
-`TALK_FIRST` otherwise, naming her and Capital City), meet the item's
+`TALK_FIRST` otherwise, naming her and Riverside Village), meet the item's
 `min_level` (`QUEST_LOCKED`, status 403), and hold enough gold
 (`NOT_ENOUGH_GOLD`). The copy lands unequipped — wield it via `equip_item`
 (weapons and armor use separate slots, so a blade and a plate stay on

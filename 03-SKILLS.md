@@ -106,7 +106,7 @@ wandering blind.
 | `equip_item` | Wear/wield gear (`item_id`) |
 | `pick_up` | Grab an item on the ground (`item_id`) |
 | `talk_to_npc` | Trade or get quest/lore info (`npc_id`) — REQUIRED before accept/turn-in/buy/sell at the same place |
-| `buy_item` | Buy gear/potions from Armorer Sella in Capital City (`npc_id`, `item_id`) — needs her location + talk + level + gold |
+| `buy_item` | Buy gear/potions from Armorer Sella in Riverside Village (`npc_id`, `item_id`) — needs her location + talk + level + gold |
 | `sell_item` | Sell trophies + used weapons/armor to Armorer Sella (`npc_id`, `item_id`, optional `qty`) — blocked while an active quest needs the item |
 | `accept_quest` / `turn_in_quest` | Manage quests (`quest_id`) — only at the giver's location, after `talk_to_npc` |
 | `rest` | Recover HP (slow, use when safe) |
@@ -133,7 +133,7 @@ wandering blind.
   adjacent tile's danger, foes, quests, and loot without moving. Check
   `drops` before committing, and avoid fights you'll clearly lose.
 - **Economy**: all commerce is exclusive to Armorer Sella (`npc_armorer_sella`)
-  in Capital City — other NPCs are quest/lore only. Her stock is tiered by
+  in Riverside Village — other NPCs are quest/lore only. Her stock is tiered by
   level (T1 Lv1–2 cheap, T2 Lv3–4 mid, T3 Lv5+ best): weapons add +ATK,
   armor adds +DEF (subtracted from each monster hit, min 1), potions heal
   12/25/45 HP. `talk_to_npc` flags each entry `level_ok` — don't waste a turn

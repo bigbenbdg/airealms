@@ -27,7 +27,7 @@ An agent registers once, stores its API key, then plays turn-by-turn at any cade
 
 ## ✨ Features
 
-- **14 actions** — `move`, `scout` (peek at adjacent zones), `attack`, `flee`, `use_item`, `equip_item`, `pick_up`, `talk_to_npc`, `buy_item`/`sell_item` (exclusive merchant in Capital City), `accept_quest`, `turn_in_quest`, `rest`, `say` — all machine-described in `GET /actions/schema`
+- **14 actions** — `move`, `scout` (peek at adjacent zones), `attack`, `flee`, `use_item`, `equip_item`, `pick_up`, `talk_to_npc`, `buy_item`/`sell_item` (exclusive merchant in Riverside Village), `accept_quest`, `turn_in_quest`, `rest`, `say` — all machine-described in `GET /actions/schema`
 - **Quest chain with level gates** — 6 kill quests (rats → wolves → bandits → trolls/wraiths → drake, levels 1–5) paying ~1200 XP + kill XP; state-aware NPCs that track your progress, congratulate you, and point you at other work
 - **Living world** — size-scaled monster respawn (rats ~85s, drakes ~270s, max 10 per zone), per-type loot drops, ground treasure, town regeneration (+5 HP/action)
 - **Server-authoritative goals** — `GET /meta/goals` gives every brain the same objectives; death returns a rule-based `death_report` (killer + lessons for your next character)
@@ -84,7 +84,7 @@ Full rules live in [`01-project-plan.md`](01-project-plan.md); the contract in [
 | `attack` / `flee` | 5s | Sync combat vs monsters (PvP disabled in v1) |
 | `use_item` / `equip_item` / `pick_up` | 3s / 3s / 2s | Potions, gear, ground loot |
 | `talk_to_npc` / `accept_quest` / `turn_in_quest` | 2s | Quests, lore; NPCs react to your progress |
-| `buy_item` / `sell_item` | 3s / 2s | Tiered gear + trophy buyback, exclusive to Armorer Sella (Capital City) |
+| `buy_item` / `sell_item` | 3s / 2s | Tiered gear + trophy buyback, exclusive to Armorer Sella (Riverside Village) |
 | `rest` | 60s | +10 HP, use when safe |
 | `say` | 5s | Public chat (max 200 chars, untrusted content) |
 

@@ -427,8 +427,8 @@ def test_world_state_full_place_intel():
     assert {e["to"] for e in by_id["riverside_village"]["exits"]} == {"oakhollow_forest", "capital_city"}
     toran = next(n for n in by_id["riverside_village"]["npcs"] if n["npc_id"] == "npc_blacksmith")
     assert toran["has_quest"] is True and toran["can_trade"] is False
-    # commerce is exclusive to Armorer Sella in the Capital
-    sella = next(n for n in by_id["capital_city"]["npcs"] if n["npc_id"] == "npc_armorer_sella")
+    # commerce is exclusive to Armorer Sella in the home village
+    sella = next(n for n in by_id["riverside_village"]["npcs"] if n["npc_id"] == "npc_armorer_sella")
     assert sella["can_trade"] is True and sella["has_quest"] is False
     rq = next(q for q in by_id["riverside_village"]["quests"] if q["quest_id"] == "q_ratcatcher")
     assert rq["item_id"] == "itm_rat_pelt" and rq["item_name"] == "Rat Pelt" and rq["min_level"] == 1
@@ -649,17 +649,20 @@ def test_move_announces_every_npc_in_map():
     c = fresh_client()
     reg = register(c, "Newcomer")
     h = {"Authorization": f"Bearer {reg['api_key']}"}
-    # Capital City holds 3 NPCs: arrival names all of them with roles + IDs
+    # Capital City holds 2 NPCs: arrival names both with roles + IDs
     out = _move(c, h, reg["agent_id"], "capital_city")
     ids = {n["npc_id"] for n in out["data"]["npcs"]}
-    assert ids == {"npc_captain", "npc_merchant", "npc_armorer_sella"}
-    assert "Armorer Sella" in out["narrative"] and "npc_armorer_sella" in out["narrative"]
-    assert "merchant" in out["narrative"] and "quest-giver" in out["narrative"]
-    assert "talk_to_npc" in out["narrative"]
+    assert ids == {"npc_captain", "npc_merchant"}
+    assert "quest-giver" in out["narrative"] and "talk_to_npc" in out["narrative"]
     assert out["data"]["monsters_present"] >= 2  # bandits stalk the capital
     assert "monster(s)" in out["narrative"]
+    # Riverside Village holds 3 NPCs incl. the merchant: arrival names them all
+    home = _move(c, h, reg["agent_id"], "riverside_village")
+    home_ids = {n["npc_id"] for n in home["data"]["npcs"]}
+    assert home_ids == {"npc_blacksmith", "npc_innkeeper", "npc_armorer_sella"}
+    assert "Armorer Sella" in home["narrative"] and "npc_armorer_sella" in home["narrative"]
+    assert "merchant" in home["narrative"] and "quest-giver" in home["narrative"]
     # Deep Cave holds no NPCs: arrival says so plainly
-    _move(c, h, reg["agent_id"], "riverside_village")
     _move(c, h, reg["agent_id"], "oakhollow_forest")
     cave = _move(c, h, reg["agent_id"], "deep_cave")
     assert cave["data"]["npcs"] == []
@@ -695,7 +698,7 @@ def test_merchant_talk_shows_tiered_shop_and_buyback():
     c = fresh_client()
     reg = register(c, "Shopper")
     h = {"Authorization": f"Bearer {reg['api_key']}"}
-    _move(c, h, reg["agent_id"], "capital_city")
+    # merchant lives at spawn: no travel needed
     t = _talk(c, h, reg["agent_id"], "npc_armorer_sella")
     shop = t["data"]["shop"]
     assert len(shop) >= 9, f"merchant should stock tiers of gear, got {len(shop)}"
@@ -727,8 +730,7 @@ def test_merchant_talk_shows_tiered_shop_and_buyback():
     assert kinds["itm_rat_pelt"] == "trophy"
     assert buys["itm_short_sword"] == 30 and kinds["itm_short_sword"] == "resale"  # half of 60g
     assert buys["itm_dragonslayer"] == 200  # half of 400g
-    # old traders sell nothing anymore
-    _move(c, h, reg["agent_id"], "riverside_village")
+    # old traders sell nothing anymore (same tile, no travel)
     t2 = _talk(c, h, reg["agent_id"], "npc_blacksmith")
     assert t2["data"]["shop"] == [] and t2["data"]["buys"] == []
 
@@ -737,7 +739,7 @@ def test_buy_gated_merchant_only():
     c = fresh_client()
     reg = register(c, "Buyer")
     h = {"Authorization": f"Bearer {reg['api_key']}"}
-    _move(c, h, reg["agent_id"], "capital_city")
+    # merchant lives at spawn: commerce starts at home
     # missing npc_id rejected up front
     _set_hp_and_ready(reg["agent_id"], 25)
     bad = c.post("/api/v1/actions", json={"action": "buy_item",
@@ -767,22 +769,22 @@ def test_buy_gated_merchant_only():
     sword = next(i for i in inv if i["item_id"] == "itm_short_sword")
     assert sword["bonus"] == 2 and sword.get("equipped") is False
     assert c.get("/api/v1/status", headers=h).json()["data"]["gold"] == 940
-    # old trader NPCs never sell, even at home with a talk behind us
-    _move(c, h, reg["agent_id"], "riverside_village")
+    # old trader NPCs never sell, even on the same tile with a talk behind us
     _talk(c, h, reg["agent_id"], "npc_blacksmith")
     refuse = _buy(c, h, reg["agent_id"], "npc_blacksmith", "itm_short_sword")
     assert refuse.json()["detail"]["error"]["code"] == "TARGET_NOT_FOUND"
     # merchant sale from the wrong town is refused with the way back
+    _move(c, h, reg["agent_id"], "capital_city")
     away = _buy(c, h, reg["agent_id"], "npc_armorer_sella", "itm_short_sword")
     assert away.json()["detail"]["error"]["code"] == "WRONG_LOCATION"
-    assert "Capital City" in away.json()["detail"]["error"]["message"]
+    assert "Riverside Village" in away.json()["detail"]["error"]["message"]
 
 
 def test_sell_trophies_quest_protected():
     c = fresh_client()
     reg = register(c, "Seller")
     h = {"Authorization": f"Bearer {reg['api_key']}"}
-    _move(c, h, reg["agent_id"], "capital_city")
+    # merchant + quest giver share the home tile: no travel needed
     _talk(c, h, reg["agent_id"], "npc_armorer_sella")
     # no talk... covered; unknown goods and gear are not bought
     _set_hp_and_ready(reg["agent_id"], 25)
@@ -804,24 +806,20 @@ def test_sell_trophies_quest_protected():
     short = _sell(c, h, reg["agent_id"], "npc_armorer_sella", "itm_rat_pelt", qty=1)
     assert short.json()["detail"]["error"]["code"] == "INVALID_PARAMS"
     # quest block: accept ratcatcher (needs pelts), hold a surplus of 5 -> any sale blocked
-    _move(c, h, reg["agent_id"], "riverside_village")
     _talk(c, h, reg["agent_id"], "npc_blacksmith")
     _set_hp_and_ready(reg["agent_id"], 25)
     assert c.post("/api/v1/actions", json={"action": "accept_quest",
                   "params": {"quest_id": "q_ratcatcher"}}, headers=h).status_code == 200
     _give_quest_items(reg["agent_id"], "itm_rat_pelt", 5, "Rat Pelt")
-    _move(c, h, reg["agent_id"], "capital_city")
     _talk(c, h, reg["agent_id"], "npc_armorer_sella")
     blocked = _sell(c, h, reg["agent_id"], "npc_armorer_sella", "itm_rat_pelt", qty=1)
     assert blocked.json()["detail"]["error"]["code"] == "INVALID_PARAMS"
     assert "active quest" in blocked.json()["detail"]["error"]["message"]
     # finish the quest (consumes 3, leaves 2) -> leftovers sell fine
-    _move(c, h, reg["agent_id"], "riverside_village")
     _talk(c, h, reg["agent_id"], "npc_blacksmith")  # check-in while holding the goods
     _set_hp_and_ready(reg["agent_id"], 25)
     assert c.post("/api/v1/actions", json={"action": "turn_in_quest",
                   "params": {"quest_id": "q_ratcatcher"}}, headers=h).status_code == 200
-    _move(c, h, reg["agent_id"], "capital_city")
     _talk(c, h, reg["agent_id"], "npc_armorer_sella")
     before2 = c.get("/api/v1/status", headers=h).json()["data"]["gold"]
     ok = _sell(c, h, reg["agent_id"], "npc_armorer_sella", "itm_rat_pelt", qty=2)
@@ -836,7 +834,6 @@ def test_sell_gear_half_buy_price():
     c = fresh_client()
     reg = register(c, "Trader")
     h = {"Authorization": f"Bearer {reg['api_key']}"}
-    _move(c, h, reg["agent_id"], "capital_city")
     _talk(c, h, reg["agent_id"], "npc_armorer_sella")
     _set_gold(reg["agent_id"], 1000)
     assert _buy(c, h, reg["agent_id"], "npc_armorer_sella", "itm_short_sword").status_code == 200
@@ -869,7 +866,6 @@ def test_equip_weapon_and_armor_slots_with_defense():
     c = fresh_client()
     reg = register(c, "Tank")
     h = {"Authorization": f"Bearer {reg['api_key']}"}
-    _move(c, h, reg["agent_id"], "capital_city")
     _talk(c, h, reg["agent_id"], "npc_armorer_sella")
     _set_gold(reg["agent_id"], 1000)
     assert _buy(c, h, reg["agent_id"], "npc_armorer_sella", "itm_short_sword").status_code == 200
@@ -901,7 +897,6 @@ def test_equip_weapon_and_armor_slots_with_defense():
     a = db.query(_A).filter(_A.id == reg["agent_id"]).first()
     assert player_defense(a) == 1
     db.close()
-    _move(c, h, reg["agent_id"], "riverside_village")
     _move(c, h, reg["agent_id"], "oakhollow_forest")
     db = SessionLocal()
     m = db.query(_M).filter(_M.location == "oakhollow_forest", _M.alive == True).first()  # noqa: E712
