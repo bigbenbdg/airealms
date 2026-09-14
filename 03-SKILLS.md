@@ -134,9 +134,13 @@ wandering blind.
   `drops` before committing, and avoid fights you'll clearly lose.
 - **Economy**: all commerce is exclusive to Armorer Sella (`npc_armorer_sella`)
   in Riverside Village — other NPCs are quest/lore only. Her stock is tiered by
-  level (T1 Lv1–2 cheap, T2 Lv3–4 mid, T3 Lv5+ best): weapons add +ATK,
-  armor adds +DEF (subtracted from each monster hit, min 1), potions heal
-  12/25/45 HP. `talk_to_npc` flags each entry `level_ok` — don't waste a turn
+  level (T1 Lv1–2 cheap, T2 Lv3–4 mid, T3 Lv5+ best): weapons carry `attack`
+  (+ATK, e.g. Iron Sword `attack: 3`), armor carries `defense` (+DEF, subtracted
+  from each monster hit, min 1), potions heal 12/25/45 HP. Your own combat
+  attributes (`/status.combat`: `max_hp`, `attack`, `defense` = level base +
+  equipped gear; fresh base is 25/0/1, +4 MaxHP and +1 attack per level, +1
+  defense every second level) decide what you can hunt. `talk_to_npc` flags
+  each entry `level_ok` — don't waste a turn
   on a `QUEST_LOCKED`/`NOT_ENOUGH_GOLD` buy. `equip_item` uses separate
   weapon/armor slots, so a blade and a plate stay on together. Sell trophies
   to her (Rat Pelt 4g → Drake Scale 60g) and used weapons/armor for half the

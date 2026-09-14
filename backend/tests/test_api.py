@@ -782,10 +782,10 @@ def test_merchant_talk_shows_tiered_shop_and_buyback():
     assert by_id["itm_short_sword"]["min_level"] == 1
     assert by_id["itm_knight_blade"]["min_level"] == 3
     assert by_id["itm_dragonslayer"]["min_level"] == 5
-    # weapons +ATK, armor +DEF, potions heal — bonus and price rise with tier
-    assert by_id["itm_short_sword"]["bonus"] == 2
-    assert by_id["itm_knight_blade"]["bonus"] == 5
-    assert by_id["itm_dragonslayer"]["bonus"] == 9
+    # weapons +ATK, armor +DEF, potions heal — attack and price rise with tier
+    assert by_id["itm_short_sword"]["attack"] == 2
+    assert by_id["itm_knight_blade"]["attack"] == 5
+    assert by_id["itm_dragonslayer"]["attack"] == 9
     assert by_id["itm_cloth_garb"]["defense"] == 1
     assert by_id["itm_chainmail"]["defense"] == 4
     assert by_id["itm_dragonscale_mail"]["defense"] == 7
@@ -834,7 +834,7 @@ def test_buy_gated_merchant_only():
     locked = _buy(c, h, reg["agent_id"], "npc_armorer_sella", "itm_dragonslayer")
     assert locked.json()["detail"]["error"]["code"] == "QUEST_LOCKED"
     assert "level 5" in locked.json()["detail"]["error"]["message"]
-    # success: gold deducted, item lands unequipped with its bonus
+    # success: gold deducted, item lands unequipped with its attack
     _set_gold(reg["agent_id"], 1000)
     ok = _buy(c, h, reg["agent_id"], "npc_armorer_sella", "itm_short_sword")
     assert ok.status_code == 200, ok.text
@@ -842,7 +842,7 @@ def test_buy_gated_merchant_only():
     assert ok.json()["data"]["price"] == 60
     inv = c.get("/api/v1/status", headers=h).json()["data"]["inventory"]
     sword = next(i for i in inv if i["item_id"] == "itm_short_sword")
-    assert sword["bonus"] == 2 and sword.get("equipped") is False
+    assert sword["attack"] == 2 and sword.get("equipped") is False
     assert c.get("/api/v1/status", headers=h).json()["data"]["gold"] == 940
     # old trader NPCs never sell, even on the same tile with a talk behind us
     _talk(c, h, reg["agent_id"], "npc_blacksmith")
@@ -965,12 +965,13 @@ def test_equip_weapon_and_armor_slots_with_defense():
     assert next(i for i in inv2 if i["item_id"] == "itm_iron_sword")["equipped"] is True
     assert next(i for i in inv2 if i["item_id"] == "itm_short_sword")["equipped"] is False
     assert next(i for i in inv2 if i["item_id"] == "itm_cloth_garb")["equipped"] is True
-    # defense math: fixed 5-damage hit reduced by 1 (cloth garb)
+    # defense math: fixed 5-damage hit reduced by total defense
+    # (base 1 + cloth garb 1 = 2)
     import app.main as main_module
     from app.models import Agent as _A, Monster as _M
     db = SessionLocal()
     a = db.query(_A).filter(_A.id == reg["agent_id"]).first()
-    assert player_defense(a) == 1
+    assert player_defense(a) == 2
     db.close()
     _move(c, h, reg["agent_id"], "oakhollow_forest")
     db = SessionLocal()
@@ -987,7 +988,7 @@ def test_equip_weapon_and_armor_slots_with_defense():
         out = c.post("/api/v1/actions", json={"action": "attack",
                      "params": {"target_id": mid}}, headers=h).json()
         assert out["data"]["result"] == "hit"
-        assert out["data"]["damage_taken"] == 4  # 5 - 1 DEF
+        assert out["data"]["damage_taken"] == 3  # 5 - 2 DEF (base 1 + cloth 1)
     finally:
         main_module.monster_attack_damage = real
 
@@ -1038,3 +1039,86 @@ def test_turn_in_requires_return_and_checkin_talk():
     done = c.post("/api/v1/actions", json={"action": "turn_in_quest", "params": {"quest_id": "q_ratcatcher"}}, headers=h)
     assert done.status_code == 200, done.text
     assert done.json()["data"]["result"] == "quest_turned_in"
+
+
+def test_combat_attributes_exposed_and_scale_with_level():
+    from app.engine import apply_xp, player_combat_stats
+    from app.models import Agent as _A
+    c = fresh_client()
+    reg = register(c, "Brawler")
+    h = {"Authorization": f"Bearer {reg['api_key']}"}
+    # fresh L1: base 0 ATK / 1 DEF; starter rusty sword (attack 1) equipped
+    st = c.get("/api/v1/status", headers=h).json()["data"]
+    assert st["combat"]["base_attack"] == 0
+    assert st["combat"]["base_defense"] == 1
+    assert st["combat"]["gear_attack"] == 1
+    assert st["combat"]["gear_defense"] == 0
+    assert st["combat"]["attack"] == 1
+    assert st["combat"]["defense"] == 1
+    assert st["combat"]["max_hp"] == 25
+    # public profile + per-turn snapshot carry the totals too
+    prof = c.get(f"/api/v1/agents/{reg['agent_id']}").json()["data"]
+    assert prof["attack"] == 1 and prof["defense"] == 1
+    _set_hp_and_ready(reg["agent_id"], 25)
+    snap = c.post("/api/v1/actions", json={"action": "say",
+                 "params": {"message": "hi"}}, headers=h).json()["data"]["player"]
+    assert snap["attack"] == 1 and snap["defense"] == 1
+    assert snap["combat"]["base_attack"] == 0
+    # level curve: L1->L2 (+1 ATK, no DEF), L2->L3 (+1 ATK, +1 DEF)
+    db = SessionLocal()
+    a = db.query(_A).filter(_A.id == reg["agent_id"]).first()
+    assert apply_xp(a, 200) is True  # xp_for_level(1) = 200
+    assert (a.level, a.base_attack, a.base_defense, a.max_hp) == (2, 1, 1, 29)
+    assert apply_xp(a, 400) is True  # xp_for_level(2) = 400
+    assert (a.level, a.base_attack, a.base_defense, a.max_hp) == (3, 2, 2, 33)
+    combat = player_combat_stats(a)
+    assert combat["attack"] == 2 + 1  # base 2 + rusty sword 1
+    assert combat["defense"] == 2 + 0
+    db.close()
+
+
+def test_gear_attack_replaces_and_stacks_with_base():
+    c = fresh_client()
+    reg = register(c, "Armed")
+    h = {"Authorization": f"Bearer {reg['api_key']}"}
+    _talk(c, h, reg["agent_id"], "npc_armorer_sella")
+    _set_gold(reg["agent_id"], 1000)
+    assert _buy(c, h, reg["agent_id"], "npc_armorer_sella", "itm_short_sword").status_code == 200
+    assert _buy(c, h, reg["agent_id"], "npc_armorer_sella", "itm_cloth_garb").status_code == 200
+    _set_hp_and_ready(reg["agent_id"], 25)
+    assert c.post("/api/v1/actions", json={"action": "equip_item",
+                 "params": {"item_id": "itm_short_sword"}}, headers=h).status_code == 200
+    _set_hp_and_ready(reg["agent_id"], 25)
+    assert c.post("/api/v1/actions", json={"action": "equip_item",
+                 "params": {"item_id": "itm_cloth_garb"}}, headers=h).status_code == 200
+    st = c.get("/api/v1/status", headers=h).json()["data"]
+    # base 0/1 + short sword 2 + cloth garb 1
+    assert st["combat"]["gear_attack"] == 2
+    assert st["combat"]["gear_defense"] == 1
+    assert st["combat"]["attack"] == 2
+    assert st["combat"]["defense"] == 2
+    # rusty sword was swapped out of the weapon slot
+    rusty = next(i for i in st["inventory"] if i["item_id"] == "itm_rusty_sword")
+    assert rusty["attack"] == 1 and rusty.get("equipped") is False
+
+
+def test_legacy_bonus_defend_items_still_count():
+    import json as _json
+    from app.engine import player_attack_damage, player_defense
+    from app.models import Agent as _A
+    c = fresh_client()
+    reg = register(c, "Legacy")
+    db = SessionLocal()
+    a = db.query(_A).filter(_A.id == reg["agent_id"]).first()
+    inv = _json.loads(a.inventory)
+    for i in inv:
+        i["equipped"] = False
+    inv.append({"item_id": "itm_old_axe", "name": "Old Axe",
+                "qty": 1, "equipped": True, "bonus": 3})
+    inv.append({"item_id": "itm_old_plate", "name": "Old Plate",
+                "qty": 1, "equipped": True, "defend": 4})
+    a.inventory = _json.dumps(inv)
+    db.commit()
+    assert player_defense(a) == 1 + 4  # base 1 + legacy defend 4
+    assert player_attack_damage(a) >= 3 + 1 + 0 + 3  # 3 + str//2 + base + legacy
+    db.close()

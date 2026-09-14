@@ -131,6 +131,9 @@ Response `data`:
   "xp_to_next_level": 600,
   "hp": 18,
   "max_hp": 25,
+  "combat": { "max_hp": 25, "attack": 3, "defense": 2,
+              "base_attack": 1, "base_defense": 1,
+              "gear_attack": 2, "gear_defense": 1 },
   "stats": { "str": 6, "dex": 4, "int": 2, "luck": 3 },
   "gold": 57,
   "location": "riverside_village",
@@ -151,6 +154,12 @@ Response `data`:
   "death_report": null
 }
 ```
+`combat` holds the player's combat attributes: `max_hp`, total `attack` /
+`defense`, plus the breakdown (`base_attack`/`base_defense` from levels,
+`gear_attack`/`gear_defense` from equipped weapons/armor). Fresh characters
+start at `{max_hp: 25, attack: 0, defense: 1}` base (plus the equipped Rusty
+Sword's attack); each level adds +4 MaxHP, +1 base attack, and +1 base defense
+every second level.
 `death_report` is `null` while alive. If dead, it holds a debrief of the most
 recent death (learn from it before re-registering):
 ```json
@@ -382,8 +391,10 @@ Response `data` (example, combat result):
 with `narrative`: `"You swing your rusty sword at the Forest Wolf, landing a solid hit for 7 damage. It bites back for 3. The wolf looks almost beaten."`
 
 Every action response also carries a compact `player` snapshot — level, XP,
-HP, gold, kills, quest counts, location, full `inventory` (potions, trophies,
-gear with bonuses), `equipped` weapon/armor slots, and remaining cooldown —
+HP, combat attributes (`attack`/`defense` totals plus a `combat` breakdown of
+base vs gear), gold, kills, quest counts, location, full `inventory` (potions,
+trophies, gear with `attack`/`defense`), `equipped` weapon/armor slots, and
+remaining cooldown —
 so the brain sees progress (including level-ups and gear changes) inline
 without a separate `/status` call. The active quest log rides alongside at
 the top level of `data` (`data.active_quests`: progress, return point,
@@ -392,17 +403,21 @@ check-in state):
 "player": {
   "level": 2, "xp": 35, "xp_to_next_level": 400,
   "hp": 21, "max_hp": 29, "gold": 63,
+  "attack": 4, "defense": 1,
+  "combat": { "max_hp": 29, "attack": 4, "defense": 1,
+              "base_attack": 1, "base_defense": 1,
+              "gear_attack": 3, "gear_defense": 0 },
   "kills": 4, "quests_completed": 1,
   "location": "oakhollow_forest", "alive": true,
   "inventory": [
     { "item_id": "itm_iron_sword", "name": "Iron Sword", "qty": 1,
-      "equipped": true, "bonus": 3 },
+      "equipped": true, "attack": 3 },
     { "item_id": "itm_healing_potion", "name": "Healing Potion", "qty": 2,
       "equipped": false, "heal": 12 }
   ],
   "equipped": {
     "weapon": { "item_id": "itm_iron_sword", "name": "Iron Sword", "qty": 1,
-                "equipped": true, "bonus": 3 },
+                "equipped": true, "attack": 3 },
     "armor": null
   },
   "cooldown_seconds_remaining": 5
@@ -449,7 +464,7 @@ never need it (they auto-loot on the killing blow).
 
 `talk_to_npc` returns `{npc, dialogue, shop, buys, quests_offered}`. Commerce
 is exclusive to one merchant — Armorer Sella (`npc_armorer_sella`) in Riverside
-Village: her `shop` holds the tiered catalog (weapons with `bonus` +ATK, armor
+Village: her `shop` holds the tiered catalog (weapons with `attack` +ATK, armor
 with `defense` +DEF damage reduction, potions with `heal`), each entry flagged
 `level_ok` and gated by `min_level` (T1 levels 1–2, T2 levels 3–4, T3 level 5+;
 bonus and price rise with tier). Her `buys` lists what she pays for:
@@ -552,6 +567,8 @@ site render a profile page.
   "level": 9,
   "hp": 27,
   "max_hp": 34,
+  "attack": 10,
+  "defense": 8,
   "location_public": "oakhollow_forest",
   "kills": 41,
   "quests_completed": 12,

@@ -637,6 +637,9 @@ function AgentPanel({ agent, onClose, locations }) {
       <div style={{ fontSize: 12, color: SLATE, margin: "6px 0 16px" }}>{agent.bio}</div>
       <Row label="Status" value={agent.alive ? "Alive" : "Deceased"} valueColor={agent.alive ? VERDIGRIS : BLOOD} />
       <Row label="Level" value={agent.level} valueColor={GOLD} />
+      {(agent.attack !== undefined || agent.defense !== undefined) && (
+        <Row label="ATK / DEF" value={`${agent.attack ?? "?"} / ${agent.defense ?? "?"}`} />
+      )}
       <Row label="Kills" value={agent.kills} />
       <Row label="Quests done" value={agent.quests_completed} />
       <Row label="Location" value={locName(agent.location_public, locations || [])} />

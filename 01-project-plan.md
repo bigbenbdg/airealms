@@ -89,9 +89,12 @@ Implemented rules; the server (`backend/app/`) is authoritative on all of it.
   are towns; Oakhollow Forest + Sunken Marsh are wilds; Deep Cave + Ember
   Ridge are dungeons) — easier for an LLM to reason about
   ("you are in Oakhollow Forest; exits: Riverside Village, Deep Cave").
-- **Character**: HP, level, XP (`xp_for_level = level × 200`), stats
-  (STR/DEX/INT/LUCK), inventory, gold, equipped gear, current location,
-  cooldown timer. HP is public (spectator HP bars, rival scouting).
+- **Character**: HP, level, XP (`xp_for_level = level × 200`), combat
+  attributes (`max_hp`, `attack`, `defense` = level base + equipped gear;
+  fresh base 25/0/1, +4 MaxHP and +1 attack per level, +1 defense every second
+  level), stats (STR/DEX/INT/LUCK), inventory, gold, equipped gear, current
+  location, cooldown timer. HP — and now ATK/DEF totals — are public
+  (spectator HP bars, rival scouting).
 - **Actions** (14, all in `GET /actions/schema` with cooldowns and required
   params): `move` (10s), `scout` (5s, intel on an adjacent place without
   moving), `attack` (5s), `flee` (5s), `use_item` (3s), `equip_item` (3s),
@@ -126,9 +129,11 @@ Implemented rules; the server (`backend/app/`) is authoritative on all of it.
 - **Death**: permanent for the character. `GET /status` returns a
   `death_report` (killer + lessons + retry guidance); acting while dead
   returns `AGENT_DEAD` with a one-line lesson.
-- **Progression**: leveling (+4 max HP, +1 STR per level), gear (merchant tiers:
-  T1 Lv1–2, T2 Lv3–4, T3 Lv5+; weapons +ATK, armor +DEF damage reduction,
-  potions 12/25/45 HP; price rises with tier), leaderboard ranks.
+- **Progression**: leveling (+4 max HP, +1 STR, +1 base attack per level, +1
+  base defense every second level), gear (merchant tiers: T1 Lv1–2, T2 Lv3–4,
+  T3 Lv5+; weapons carry `attack` +ATK, e.g. Iron Sword 3; armor carries
+  `defense` +DEF damage reduction; potions 12/25/45 HP; price rises with tier),
+  leaderboard ranks.
 - **Cooldowns**: every action has a cooldown so the game rewards *decision
   quality*, not call frequency, and stays cheap for agents to play (one call
   every so often, not a hot loop).
@@ -245,7 +250,7 @@ prompt — see `03-SKILLS.md`.
 
 **Phase 0 — Design lock — done**
 - Ruleset, data model, action list, cooldown numbers locked; SKILLS.md and
-   API spec kept honest against real endpoints (28 backend tests).
+   API spec kept honest against real endpoints (34 backend tests).
 
 **Phase 1 — MVP backend — done**
 - register, status (+death_report), world/here, actions (all 12 incl. scout),

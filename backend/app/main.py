@@ -21,6 +21,7 @@ from .seed import (LOCATIONS, EDGES, NPCS, QUESTS, SHOP, STARTER_INVENTORY,
 from .engine import (ACTION_DEFS, check_rate_limit, check_idempotency, store_idempotency,
                      load_json, apply_xp, player_attack_damage, player_defense, monster_attack_damage,
                      set_cooldown, cooldown_remaining, manager, xp_for_level,
+                     item_attack, item_defense, player_combat_stats,
                      VILLAGE_REGEN_HP, respawn_due, REQUIRED_PARAMS)
 from .goals import GOALS, realm_goal_text, death_report
 
@@ -198,18 +199,21 @@ def _active_quests_snapshot(agent) -> list:
 
 
 def _equipped_snapshot(agent) -> dict:
-    """Equipped gear split by slot: weapon (+ATK bonus) and armor (+DEF).
+    """Equipped gear split by slot: weapon (attack) and armor (defense).
     Legacy armor (already consumed into max HP) counts via kind/equipped."""
     inv = load_json(agent.inventory, [])
-    weapon = next((i for i in inv if i.get("equipped") and i.get("bonus")), None)
+    weapon = next((i for i in inv if i.get("equipped")
+                   and (item_attack(i) or i.get("kind") == "weapon")), None)
     armor = next((i for i in inv if i.get("equipped")
-                  and (i.get("defense") or i.get("kind") == "armor")), None)
+                  and (item_defense(i) or i.get("kind") == "armor")), None)
     return {"weapon": weapon, "armor": armor}
 
 
 def agent_public(a: Agent):
+    combat = player_combat_stats(a)
     return {"agent_id": a.id, "name": a.name, "bio": a.bio, "level": a.level,
             "hp": a.hp, "max_hp": a.max_hp,
+            "attack": combat["attack"], "defense": combat["defense"],
             "location_public": a.location, "kills": a.kills,
             "quests_completed": a.quests_completed, "alive": a.alive,
             "registered_at": a.registered_at.isoformat() if a.registered_at else None}
@@ -286,6 +290,7 @@ def status(agent: Agent = Depends(get_agent), db: Session = Depends(get_db)):
     return ok({
         "agent_id": agent.id, "name": agent.name, "level": agent.level, "xp": agent.xp,
         "xp_to_next_level": xp_for_level(agent.level), "hp": agent.hp, "max_hp": agent.max_hp,
+        "combat": player_combat_stats(agent),
         "stats": load_json(agent.stats, {}), "gold": agent.gold, "location": agent.location,
         "status_effects": [], "inventory": inv,
         "active_quests": [{"quest_id": q["quest_id"], "title": q["title"],
@@ -336,9 +341,13 @@ def world_map():
 
 def zone_snapshot(db: Session, loc):
     """Full intel for one place: quests, NPCs, monsters, loot, players, exits."""
-    agents = [{"agent_id": a.id, "name": a.name, "level": a.level,
-               "hp": a.hp, "max_hp": a.max_hp, "alive": a.alive}
-              for a in db.query(Agent).filter(Agent.location == loc["id"]).all()]
+    agents = []
+    for a in db.query(Agent).filter(Agent.location == loc["id"]).all():
+        combat = player_combat_stats(a)
+        agents.append({"agent_id": a.id, "name": a.name, "level": a.level,
+                       "hp": a.hp, "max_hp": a.max_hp,
+                       "attack": combat["attack"], "defense": combat["defense"],
+                       "alive": a.alive})
     monsters = []
     for m in db.query(Monster).filter(Monster.location == loc["id"], Monster.alive == True).all():  # noqa: E712
         drop = MONSTER_DROPS.get(m.name)
@@ -409,12 +418,16 @@ async def do_action(body: dict, request: Request, agent: Agent = Depends(get_age
     secs = set_cooldown(db_agent, action)
     if isinstance(result, dict) and "cooldown_seconds" not in result:
         result["cooldown_seconds"] = secs
-    # Player snapshot on every turn: level, XP, HP, gold and quest counts ride
-    # along so the brain never needs a separate /status call to see progress.
+    # Player snapshot on every turn: level, XP, HP, combat attributes, gold
+    # and quest counts ride along so the brain never needs a separate /status
+    # call to see progress.
+    combat = player_combat_stats(db_agent)
     result["player"] = {
         "level": db_agent.level, "xp": db_agent.xp,
         "xp_to_next_level": xp_for_level(db_agent.level),
         "hp": db_agent.hp, "max_hp": db_agent.max_hp, "gold": db_agent.gold,
+        "attack": combat["attack"], "defense": combat["defense"],
+        "combat": combat,
         "kills": db_agent.kills, "quests_completed": db_agent.quests_completed,
         "location": db_agent.location, "alive": db_agent.alive,
         "inventory": load_json(db_agent.inventory, []),
@@ -595,15 +608,15 @@ def _apply_action(db, agent, action, params):
         item = next((i for i in inv if i["item_id"] == iid), None)
         if not item:
             err("TARGET_NOT_FOUND", f"You don't have '{iid}'.")
-        if item.get("bonus"):
+        if item_attack(item) or item.get("kind") == "weapon":
             # Weapon slot: one blade at a time; armor stays equipped.
             for i in inv:
-                if i.get("bonus"):
+                if item_attack(i) or i.get("kind") == "weapon":
                     i["equipped"] = (i["item_id"] == iid)
-        elif item.get("defense"):
+        elif item_defense(item) or item.get("kind") == "armor":
             # Armor slot: one plate at a time; weapon stays equipped.
             for i in inv:
-                if i.get("defense"):
+                if item_defense(i) or i.get("kind") == "armor":
                     i["equipped"] = (i["item_id"] == iid)
         elif item.get("max_hp_bonus"):
             # Legacy armor (pre-tiered Leather Armor): consume into max HP.
@@ -648,14 +661,17 @@ def _apply_action(db, agent, action, params):
         agent.gold -= price
         entry = {"item_id": spec["item_id"], "name": spec["name"],
                  "qty": 1, "equipped": False}
-        for k in ("bonus", "defense", "heal", "kind"):
+        for k in ("attack", "defense", "heal", "kind"):
             if k in spec:
                 entry[k] = spec[k]
+        # legacy compat: old stock rows used "bonus"
+        if "attack" not in entry and "bonus" in spec:
+            entry["attack"] = spec["bonus"]
         have = next((i for i in inv if i["item_id"] == iid), None)
         if have:
             have["qty"] = have.get("qty", 0) + 1
             # bought copies arrive unequipped; keep existing equip state
-            for k in ("bonus", "defense", "heal", "kind", "name"):
+            for k in ("attack", "defense", "heal", "kind", "name"):
                 if k in entry:
                     have.setdefault(k, entry[k])
         else:

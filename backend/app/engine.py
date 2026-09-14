@@ -134,8 +134,53 @@ def xp_for_level(level: int) -> int:
     return level * 200
 
 
+def item_attack(item: dict) -> int:
+    """Weapon power. Canonical key is attack; legacy rows used bonus."""
+    try:
+        return int(item.get("attack", item.get("bonus", 0)) or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
+def item_defense(item: dict) -> int:
+    """Armor protection. Canonical key is defense; legacy rows used defend."""
+    try:
+        return int(item.get("defense", item.get("defend", 0)) or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
+def gear_attack(agent) -> int:
+    inv = load_json(agent.inventory, [])
+    return sum(item_attack(i) for i in inv if i.get("equipped"))
+
+
+def gear_defense(agent) -> int:
+    inv = load_json(agent.inventory, [])
+    return sum(item_defense(i) for i in inv if i.get("equipped"))
+
+
+def base_attack_of(agent) -> int:
+    return int(getattr(agent, "base_attack", 0) or 0)
+
+
+def base_defense_of(agent) -> int:
+    v = getattr(agent, "base_defense", None)
+    return int(v) if v is not None else 1
+
+
+def player_combat_stats(agent) -> dict:
+    """Player combat attributes: {max_hp, attack, defense} totals + breakdown."""
+    ga, gd = gear_attack(agent), gear_defense(agent)
+    ba, bd = base_attack_of(agent), base_defense_of(agent)
+    return {"max_hp": agent.max_hp, "attack": ba + ga, "defense": bd + gd,
+            "base_attack": ba, "base_defense": bd,
+            "gear_attack": ga, "gear_defense": gd}
+
+
 def apply_xp(agent, amount: int):
-    """Returns (leveled_up: bool)."""
+    """Returns (leveled_up: bool). Level curve: +4 MaxHP, +1 STR, +1 base
+    attack per level; +1 base defense every even level."""
     agent.xp += amount
     leveled = False
     while agent.xp >= xp_for_level(agent.level):
@@ -143,6 +188,14 @@ def apply_xp(agent, amount: int):
         agent.level += 1
         agent.max_hp += 4
         agent.hp = agent.max_hp
+        if getattr(agent, "base_attack", None) is None:
+            agent.base_attack = 0
+        agent.base_attack = int(agent.base_attack or 0) + 1
+        if getattr(agent, "base_defense", None) is None:
+            agent.base_defense = 1
+        if agent.level % 2 == 1:
+            # L3, L5, ... (every second level-up) harden the character
+            agent.base_defense = int(agent.base_defense or 1) + 1
         stats = load_json(agent.stats, {})
         stats["str"] = stats.get("str", 3) + 1
         agent.stats = json.dumps(stats)
@@ -152,16 +205,13 @@ def apply_xp(agent, amount: int):
 
 def player_attack_damage(agent) -> int:
     stats = load_json(agent.stats, {})
-    inv = load_json(agent.inventory, [])
-    bonus = sum(i.get("bonus", 0) for i in inv if i.get("equipped"))
-    base = 3 + stats.get("str", 3) // 2 + bonus
+    base = 3 + stats.get("str", 3) // 2 + base_attack_of(agent) + gear_attack(agent)
     return max(1, base + random.randint(1, 6) - 2)
 
 
 def player_defense(agent) -> int:
-    """Total damage reduction from equipped armor (defense stat)."""
-    inv = load_json(agent.inventory, [])
-    return sum(i.get("defense", 0) for i in inv if i.get("equipped"))
+    """Total damage reduction: base defense + equipped armor."""
+    return base_defense_of(agent) + gear_defense(agent)
 
 
 def monster_attack_damage(monster) -> int:

@@ -20,6 +20,8 @@ class Agent(Base):
     xp = Column(Integer, default=0)
     hp = Column(Integer, default=25)
     max_hp = Column(Integer, default=25)
+    base_attack = Column(Integer, default=0)
+    base_defense = Column(Integer, default=1)
     stats = Column(Text, default='{"str": 3, "dex": 3, "int": 2, "luck": 2}')  # JSON
     gold = Column(Integer, default=20)
     location = Column(String, default="riverside_village")

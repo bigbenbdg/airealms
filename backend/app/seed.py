@@ -91,20 +91,20 @@ QUESTS = {
 # All commerce is exclusive to Armorer Sella — see ARMORER_STOCK / MERCHANT_BUYBACK.
 SHOP = [
     {"item_id": "itm_healing_potion", "name": "Healing Potion", "price": 15, "heal": 12},
-    {"item_id": "itm_iron_sword", "name": "Iron Sword", "price": 80, "bonus": 3},
+    {"item_id": "itm_iron_sword", "name": "Iron Sword", "price": 80, "attack": 3},
     {"item_id": "itm_leather_armor", "name": "Leather Armor", "price": 60, "max_hp_bonus": 5},
 ]
 
 # Armorer Sella's exclusive stock, tiered by minimum level band:
 # T1 (Lv 1-2, cheap), T2 (Lv 3-4, mid), T3 (Lv 5+, best).
-# Weapons carry bonus (+ATK), armors carry defense (+DEF damage reduction),
-# potions carry heal. Bonus and price rise monotonically with tier.
+# Weapons carry attack (+ATK), armors carry defense (+DEF damage reduction),
+# potions carry heal. Attack and price rise monotonically with tier.
 ARMORER_STOCK = [
     # --- T1: levels 1-2 ---
     {"item_id": "itm_short_sword", "name": "Short Sword", "kind": "weapon",
-     "price": 60, "min_level": 1, "bonus": 2},
+     "price": 60, "min_level": 1, "attack": 2},
     {"item_id": "itm_iron_sword", "name": "Iron Sword", "kind": "weapon",
-     "price": 90, "min_level": 2, "bonus": 3},
+     "price": 90, "min_level": 2, "attack": 3},
     {"item_id": "itm_cloth_garb", "name": "Cloth Garb", "kind": "armor",
      "price": 50, "min_level": 1, "defense": 1},
     {"item_id": "itm_leather_armor", "name": "Leather Armor", "kind": "armor",
@@ -113,9 +113,9 @@ ARMORER_STOCK = [
      "price": 15, "min_level": 1, "heal": 12},
     # --- T2: levels 3-4 ---
     {"item_id": "itm_knight_blade", "name": "Knight Blade", "kind": "weapon",
-     "price": 180, "min_level": 3, "bonus": 5},
+     "price": 180, "min_level": 3, "attack": 5},
     {"item_id": "itm_rune_sword", "name": "Rune Sword", "kind": "weapon",
-     "price": 250, "min_level": 4, "bonus": 6},
+     "price": 250, "min_level": 4, "attack": 6},
     {"item_id": "itm_chainmail", "name": "Chainmail", "kind": "armor",
      "price": 150, "min_level": 3, "defense": 4},
     {"item_id": "itm_plate_armor", "name": "Plate Armor", "kind": "armor",
@@ -124,9 +124,9 @@ ARMORER_STOCK = [
      "price": 40, "min_level": 3, "heal": 25},
     # --- T3: level 5+ ---
     {"item_id": "itm_dragonslayer", "name": "Dragonslayer", "kind": "weapon",
-     "price": 400, "min_level": 5, "bonus": 9},
+     "price": 400, "min_level": 5, "attack": 9},
     {"item_id": "itm_ember_greatsword", "name": "Ember Greatsword", "kind": "weapon",
-     "price": 550, "min_level": 5, "bonus": 11},
+     "price": 550, "min_level": 5, "attack": 11},
     {"item_id": "itm_dragonscale_mail", "name": "Dragonscale Mail", "kind": "armor",
      "price": 350, "min_level": 5, "defense": 7},
     {"item_id": "itm_ember_plate", "name": "Ember Plate", "kind": "armor",
@@ -193,7 +193,7 @@ def stock_spec(item_id):
     return next((s for s in ARMORER_STOCK if s["item_id"] == item_id), None)
 
 STARTER_INVENTORY = [
-    {"item_id": "itm_rusty_sword", "name": "Rusty Sword", "qty": 1, "equipped": True, "bonus": 1},
+    {"item_id": "itm_rusty_sword", "name": "Rusty Sword", "qty": 1, "equipped": True, "kind": "weapon", "attack": 1},
     {"item_id": "itm_healing_potion", "name": "Healing Potion", "qty": 1, "equipped": False, "heal": 12},
 ]
 
@@ -228,7 +228,7 @@ MONSTER_DROPS = {
     "Cave Troll": {"item_id": "itm_troll_hide", "name": "Troll Hide", "chance": 0.8},
     "Marsh Wraith": {"item_id": "itm_wraith_essence", "name": "Wraith Essence", "chance": 0.7},
     "Ember Drake": {"item_id": "itm_drake_scale", "name": "Drake Scale", "chance": 0.6},
-    "Road Bandit": {"item_id": "itm_bandit_dagger", "name": "Bandit Dagger", "chance": 0.5, "bonus": 2},
+    "Road Bandit": {"item_id": "itm_bandit_dagger", "name": "Bandit Dagger", "chance": 0.5, "kind": "weapon", "attack": 2},
 }
 
 
@@ -239,8 +239,15 @@ def roll_drop(monster_name):
     if not spec:
         return None
     if random.random() < spec.get("chance", 0):
-        return {"item_id": spec["item_id"], "name": spec["name"],
-                "qty": 1, "equipped": False, **({"bonus": spec["bonus"]} if "bonus" in spec else {})}
+        out = {"item_id": spec["item_id"], "name": spec["name"],
+               "qty": 1, "equipped": False}
+        for k in ("kind", "attack", "defense"):
+            if k in spec:
+                out[k] = spec[k]
+        # legacy compat: old tables stored weapon power as "bonus"
+        if "attack" not in out and "bonus" in spec:
+            out["attack"] = spec["bonus"]
+        return out
     return None
 
 
@@ -268,7 +275,7 @@ GROUND_LOOT = [
     {"item_id": "itm_healing_potion", "name": "Healing Potion", "location": "riverside_village", "qty": 1, "heal": 12},
     {"item_id": "itm_wolf_pelt", "name": "Wolf Pelt", "location": "oakhollow_forest", "qty": 1},
     {"item_id": "itm_healing_potion", "name": "Healing Potion", "location": "oakhollow_forest", "qty": 1, "heal": 12},
-    {"item_id": "itm_iron_sword", "name": "Iron Sword", "location": "deep_cave", "qty": 1, "bonus": 3},
+    {"item_id": "itm_iron_sword", "name": "Iron Sword", "kind": "weapon", "location": "deep_cave", "qty": 1, "attack": 3},
     {"item_id": "itm_wraith_essence", "name": "Wraith Essence", "location": "sunken_marsh", "qty": 1},
     {"item_id": "itm_healing_potion", "name": "Healing Potion", "location": "capital_city", "qty": 1, "heal": 12},
 ]
@@ -285,21 +292,29 @@ def seed_ground(db):
 
 
 def ground_item_props(item_id):
-    """Full item props (heal/bonus/defense) for a ground item_id, so pick_up keeps them."""
+    """Full item props (heal/attack/defense) for a ground item_id, so pick_up keeps them."""
     for g in GROUND_LOOT:
         if g["item_id"] == item_id:
             return {k: v for k, v in g.items() if k not in ("location",)}
     for s in ARMORER_STOCK:
         if s["item_id"] == item_id:
             props = {"item_id": s["item_id"], "name": s["name"], "qty": 1}
-            for k in ("bonus", "defense", "heal"):
+            for k in ("kind", "attack", "defense", "heal"):
                 if k in s:
                     props[k] = s[k]
+            # legacy compat: old stock rows used "bonus"
+            if "attack" not in props and "bonus" in s:
+                props["attack"] = s["bonus"]
             return props
     for spec in MONSTER_DROPS.values():
         if spec["item_id"] == item_id:
-            return {"item_id": spec["item_id"], "name": spec["name"], "qty": 1,
-                    **({"bonus": spec["bonus"]} if "bonus" in spec else {})}
+            out = {"item_id": spec["item_id"], "name": spec["name"], "qty": 1}
+            for k in ("kind", "attack", "defense"):
+                if k in spec:
+                    out[k] = spec[k]
+            if "attack" not in out and "bonus" in spec:
+                out["attack"] = spec["bonus"]
+            return out
     return None
 
 
