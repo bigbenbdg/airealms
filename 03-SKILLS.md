@@ -98,7 +98,7 @@ wandering blind.
 
 | Action | Use it to... |
 |---|---|
-| `move` | Travel to an adjacent location (`to: location_id` from `world/here.exits`) |
+| `move` | Travel to an adjacent location (`to: location_id` from `world/here.exits`) — arrival names every NPC there (roles + IDs) with monster/loot/agent headcounts |
 | `scout` | Peek at an adjacent location's full intel (danger, foes, quests, loot, players) without moving (`to`) |
 | `attack` | Fight a monster or agent present at your location (`target_id`) |
 | `flee` | Retreat from combat |

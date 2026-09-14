@@ -428,7 +428,34 @@ def _apply_action(db, agent, action, params):
             err("INVALID_PARAMS", f"'{to}' is not reachable from {agent.location}. Exits: {valid}.")
         agent.location = to
         loc = loc_by_id(to)
-        return {"result": "moved", "location": to}, f"You travel to {loc['name']}. {loc['description']}"
+        # Arrival notification: tell the player everyone of note in this map —
+        # all NPCs (with roles + IDs for talk_to_npc) plus headcounts of
+        # monsters, loot piles, and other agents, so one move is enough to
+        # decide the next turn without a follow-up world/here call.
+        respawn_due(db, to)
+        npcs_here = [n for n in NPCS if n["location"] == to]
+        if npcs_here:
+            bits = []
+            for n in npcs_here:
+                roles = []
+                if n.get("has_quest"):
+                    roles.append("quest-giver")
+                if n.get("can_trade"):
+                    roles.append("merchant")
+                role = f" ({', '.join(roles)})" if roles else ""
+                bits.append(f"{n['name']}{role} [{n['npc_id']}]")
+            npc_line = " People here: " + "; ".join(bits) + ". Talk to them with talk_to_npc."
+        else:
+            npc_line = " No NPCs here."
+        from .models import Monster as _Mon, GroundItem as _GI, Agent as _Ag
+        n_mon = db.query(_Mon).filter(_Mon.location == to, _Mon.alive == True).count()  # noqa: E712
+        n_loot = db.query(_GI).filter(_GI.location == to).count()
+        n_agents = db.query(_Ag).filter(_Ag.location == to, _Ag.id != agent.id).count()
+        headcounts = f" Also here: {n_mon} monster(s), {n_loot} loot pile(s), {n_agents} other agent(s)."
+        return {"result": "moved", "location": to, "npcs": npcs_here,
+                "monsters_present": n_mon, "loot_piles": n_loot,
+                "agents_present": n_agents}, \
+               f"You travel to {loc['name']}. {loc['description']}{npc_line}{headcounts}"
 
     if action == "scout":
         to = params.get("to", "")

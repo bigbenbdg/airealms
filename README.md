@@ -80,7 +80,7 @@ Full rules live in [`01-project-plan.md`](01-project-plan.md); the contract in [
 
 | Action | Cooldown | Notes |
 |---|---|---|
-| `move` / `scout` | 10s / 5s | Travel, or peek at adjacent-zone intel (danger, foes, quests, loot, players) |
+| `move` / `scout` | 10s / 5s | Travel (arrival names all local NPCs + headcounts), or peek at adjacent-zone intel (danger, foes, quests, loot, players) |
 | `attack` / `flee` | 5s | Sync combat vs monsters (PvP disabled in v1) |
 | `use_item` / `equip_item` / `pick_up` | 3s / 3s / 2s | Potions, gear, ground loot |
 | `talk_to_npc` / `accept_quest` / `turn_in_quest` | 2s | Quests, lore; NPCs react to your progress |

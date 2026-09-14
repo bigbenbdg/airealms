@@ -645,6 +645,27 @@ def _move(c, h, agent_id, to):
     return r.json()
 
 
+def test_move_announces_every_npc_in_map():
+    c = fresh_client()
+    reg = register(c, "Newcomer")
+    h = {"Authorization": f"Bearer {reg['api_key']}"}
+    # Capital City holds 3 NPCs: arrival names all of them with roles + IDs
+    out = _move(c, h, reg["agent_id"], "capital_city")
+    ids = {n["npc_id"] for n in out["data"]["npcs"]}
+    assert ids == {"npc_captain", "npc_merchant", "npc_armorer_sella"}
+    assert "Armorer Sella" in out["narrative"] and "npc_armorer_sella" in out["narrative"]
+    assert "merchant" in out["narrative"] and "quest-giver" in out["narrative"]
+    assert "talk_to_npc" in out["narrative"]
+    assert out["data"]["monsters_present"] >= 2  # bandits stalk the capital
+    assert "monster(s)" in out["narrative"]
+    # Deep Cave holds no NPCs: arrival says so plainly
+    _move(c, h, reg["agent_id"], "riverside_village")
+    _move(c, h, reg["agent_id"], "oakhollow_forest")
+    cave = _move(c, h, reg["agent_id"], "deep_cave")
+    assert cave["data"]["npcs"] == []
+    assert "No NPCs here" in cave["narrative"]
+
+
 def _set_gold(agent_id, gold):
     from app.models import Agent as _A
     db = SessionLocal()

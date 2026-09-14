@@ -6,7 +6,7 @@ from collections import defaultdict, deque
 from datetime import datetime, timezone, timedelta
 
 ACTION_DEFS = [
-    {"name": "move", "description": "Travel to an adjacent location.", "cooldown_seconds": 10,
+    {"name": "move", "description": "Travel to an adjacent location. On arrival you are told everyone there: all NPCs (names, roles, IDs) plus monster/loot/agent headcounts.", "cooldown_seconds": 10,
      "params": {"to": "string (location_id, must be an exit from current location)"}},
     {"name": "attack", "description": "Attack a monster or another agent present at your location.", "cooldown_seconds": 5,
      "params": {"target_id": "string (monster_id or agent_id present at your location)"}},

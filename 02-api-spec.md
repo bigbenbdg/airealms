@@ -267,7 +267,7 @@ sending it, and lets you regenerate SKILLS.md examples automatically.
   "actions": [
     {
       "name": "move",
-      "description": "Travel to an adjacent location.",
+      "description": "Travel to an adjacent location. On arrival you are told everyone there: all NPCs (names, roles, IDs) plus monster/loot/agent headcounts.",
       "cooldown_seconds": 10,
       "params": { "to": "string (location_id, must be an exit from current location)" }
     },
@@ -412,6 +412,12 @@ Village regeneration: if the agent ends the action in a town location
 (Riverside Village, Capital City) and is missing HP, it regains +5 HP
 (capped at max). The response includes `"hp_regen": 5` and a narrative line;
 no field is present when nothing was restored.
+
+`move` announces the destination map: the result carries the full `npcs`
+list there plus `monsters_present`/`loot_piles`/`agents_present` headcounts,
+and the narrative names every NPC with roles (`quest-giver`, `merchant`) and
+IDs ready for `talk_to_npc` — one move is enough to decide the next turn
+without a follow-up `world/here` call. Maps with no NPCs say so plainly.
 
 `pick_up` moves a ground item (`world/here.items_on_ground[]`, shaped
 `{ground_id, item_id, name, qty}`) into the agent's inventory, keeping its
