@@ -34,6 +34,8 @@ CLIENT_REQUIRED = {
     "equip_item": ["item_id"],
     "pick_up": ["item_id"],
     "talk_to_npc": ["npc_id"],
+    "buy_item": ["npc_id", "item_id"],
+    "sell_item": ["npc_id", "item_id"],
     "accept_quest": ["quest_id"],
     "turn_in_quest": ["quest_id"],
     "say": ["message"],

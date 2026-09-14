@@ -426,7 +426,10 @@ def test_world_state_full_place_intel():
     assert by_id["riverside_village"]["danger"] == "safe"
     assert {e["to"] for e in by_id["riverside_village"]["exits"]} == {"oakhollow_forest", "capital_city"}
     toran = next(n for n in by_id["riverside_village"]["npcs"] if n["npc_id"] == "npc_blacksmith")
-    assert toran["has_quest"] is True and toran["can_trade"] is True
+    assert toran["has_quest"] is True and toran["can_trade"] is False
+    # commerce is exclusive to Armorer Sella in the Capital
+    sella = next(n for n in by_id["capital_city"]["npcs"] if n["npc_id"] == "npc_armorer_sella")
+    assert sella["can_trade"] is True and sella["has_quest"] is False
     rq = next(q for q in by_id["riverside_village"]["quests"] if q["quest_id"] == "q_ratcatcher")
     assert rq["item_id"] == "itm_rat_pelt" and rq["item_name"] == "Rat Pelt" and rq["min_level"] == 1
     assert "Rat Pelt" in rq["brief"] and "Giant Rat" in rq["brief"]
@@ -640,6 +643,218 @@ def _move(c, h, agent_id, to):
     r = c.post("/api/v1/actions", json={"action": "move", "params": {"to": to}}, headers=h)
     assert r.status_code == 200, r.text
     return r.json()
+
+
+def _set_gold(agent_id, gold):
+    from app.models import Agent as _A
+    db = SessionLocal()
+    a = db.query(_A).filter(_A.id == agent_id).first()
+    a.gold = gold
+    db.commit()
+    db.close()
+    from app.engine import _hits
+    _hits.clear()
+
+
+def _buy(c, h, agent_id, npc, iid):
+    _set_hp_and_ready(agent_id, 25)
+    r = c.post("/api/v1/actions", json={"action": "buy_item",
+               "params": {"npc_id": npc, "item_id": iid}}, headers=h)
+    return r
+
+
+def _sell(c, h, agent_id, npc, iid, qty=1):
+    _set_hp_and_ready(agent_id, 25)
+    r = c.post("/api/v1/actions", json={"action": "sell_item",
+               "params": {"npc_id": npc, "item_id": iid, "qty": qty}}, headers=h)
+    return r
+
+
+def test_merchant_talk_shows_tiered_shop_and_buyback():
+    c = fresh_client()
+    reg = register(c, "Shopper")
+    h = {"Authorization": f"Bearer {reg['api_key']}"}
+    _move(c, h, reg["agent_id"], "capital_city")
+    t = _talk(c, h, reg["agent_id"], "npc_armorer_sella")
+    shop = t["data"]["shop"]
+    assert len(shop) >= 9, f"merchant should stock tiers of gear, got {len(shop)}"
+    by_id = {s["item_id"]: s for s in shop}
+    # tier bands by min_level: 1-2 cheap, 3-4 mid, 5+ best
+    assert by_id["itm_short_sword"]["min_level"] == 1
+    assert by_id["itm_knight_blade"]["min_level"] == 3
+    assert by_id["itm_dragonslayer"]["min_level"] == 5
+    # weapons +ATK, armor +DEF, potions heal — bonus and price rise with tier
+    assert by_id["itm_short_sword"]["bonus"] == 2
+    assert by_id["itm_knight_blade"]["bonus"] == 5
+    assert by_id["itm_dragonslayer"]["bonus"] == 9
+    assert by_id["itm_cloth_garb"]["defense"] == 1
+    assert by_id["itm_chainmail"]["defense"] == 4
+    assert by_id["itm_dragonscale_mail"]["defense"] == 7
+    assert by_id["itm_healing_potion"]["heal"] == 12
+    assert by_id["itm_greater_potion"]["heal"] == 25
+    assert by_id["itm_elixir"]["heal"] == 45
+    assert by_id["itm_dragonslayer"]["price"] > by_id["itm_knight_blade"]["price"] > by_id["itm_short_sword"]["price"]
+    assert by_id["itm_dragonscale_mail"]["price"] > by_id["itm_chainmail"]["price"] > by_id["itm_cloth_garb"]["price"]
+    assert all("level_ok" in s for s in shop)
+    assert by_id["itm_dragonslayer"]["level_ok"] is False  # level 1 agent
+    assert by_id["itm_short_sword"]["level_ok"] is True
+    # buyback table scales with monster strength
+    buys = {b["item_id"]: b["price"] for b in t["data"]["buys"]}
+    assert buys["itm_rat_pelt"] == 4 and buys["itm_drake_scale"] == 60
+    assert buys["itm_rat_pelt"] < buys["itm_wolf_pelt"] < buys["itm_troll_hide"] < buys["itm_drake_scale"]
+    # old traders sell nothing anymore
+    _move(c, h, reg["agent_id"], "riverside_village")
+    t2 = _talk(c, h, reg["agent_id"], "npc_blacksmith")
+    assert t2["data"]["shop"] == [] and t2["data"]["buys"] == []
+
+
+def test_buy_gated_merchant_only():
+    c = fresh_client()
+    reg = register(c, "Buyer")
+    h = {"Authorization": f"Bearer {reg['api_key']}"}
+    _move(c, h, reg["agent_id"], "capital_city")
+    # missing npc_id rejected up front
+    _set_hp_and_ready(reg["agent_id"], 25)
+    bad = c.post("/api/v1/actions", json={"action": "buy_item",
+                 "params": {"item_id": "itm_short_sword"}}, headers=h)
+    assert bad.json()["detail"]["error"]["code"] == "INVALID_PARAMS"
+    # no talk yet: refused even standing in the right place
+    _set_hp_and_ready(reg["agent_id"], 25)
+    cold = c.post("/api/v1/actions", json={"action": "buy_item",
+                  "params": {"npc_id": "npc_armorer_sella", "item_id": "itm_short_sword"}}, headers=h)
+    assert cold.json()["detail"]["error"]["code"] == "TALK_FIRST"
+    _talk(c, h, reg["agent_id"], "npc_armorer_sella")
+    # broke (20g starting gold vs 60g sword)
+    poor = _buy(c, h, reg["agent_id"], "npc_armorer_sella", "itm_short_sword")
+    assert poor.json()["detail"]["error"]["code"] == "NOT_ENOUGH_GOLD"
+    # under-level for T3 gear
+    _set_gold(reg["agent_id"], 1000)
+    locked = _buy(c, h, reg["agent_id"], "npc_armorer_sella", "itm_dragonslayer")
+    assert locked.json()["detail"]["error"]["code"] == "QUEST_LOCKED"
+    assert "level 5" in locked.json()["detail"]["error"]["message"]
+    # success: gold deducted, item lands unequipped with its bonus
+    _set_gold(reg["agent_id"], 1000)
+    ok = _buy(c, h, reg["agent_id"], "npc_armorer_sella", "itm_short_sword")
+    assert ok.status_code == 200, ok.text
+    assert ok.json()["data"]["result"] == "bought"
+    assert ok.json()["data"]["price"] == 60
+    inv = c.get("/api/v1/status", headers=h).json()["data"]["inventory"]
+    sword = next(i for i in inv if i["item_id"] == "itm_short_sword")
+    assert sword["bonus"] == 2 and sword.get("equipped") is False
+    assert c.get("/api/v1/status", headers=h).json()["data"]["gold"] == 940
+    # old trader NPCs never sell, even at home with a talk behind us
+    _move(c, h, reg["agent_id"], "riverside_village")
+    _talk(c, h, reg["agent_id"], "npc_blacksmith")
+    refuse = _buy(c, h, reg["agent_id"], "npc_blacksmith", "itm_short_sword")
+    assert refuse.json()["detail"]["error"]["code"] == "TARGET_NOT_FOUND"
+    # merchant sale from the wrong town is refused with the way back
+    away = _buy(c, h, reg["agent_id"], "npc_armorer_sella", "itm_short_sword")
+    assert away.json()["detail"]["error"]["code"] == "WRONG_LOCATION"
+    assert "Capital City" in away.json()["detail"]["error"]["message"]
+
+
+def test_sell_trophies_quest_protected():
+    c = fresh_client()
+    reg = register(c, "Seller")
+    h = {"Authorization": f"Bearer {reg['api_key']}"}
+    _move(c, h, reg["agent_id"], "capital_city")
+    _talk(c, h, reg["agent_id"], "npc_armorer_sella")
+    # no talk... covered; unknown goods and gear are not bought
+    _set_hp_and_ready(reg["agent_id"], 25)
+    gear = c.post("/api/v1/actions", json={"action": "sell_item",
+                  "params": {"npc_id": "npc_armorer_sella", "item_id": "itm_rusty_sword", "qty": 1}}, headers=h)
+    assert gear.json()["detail"]["error"]["code"] == "TARGET_NOT_FOUND"
+    pot = _sell(c, h, reg["agent_id"], "npc_armorer_sella", "itm_healing_potion")
+    assert pot.json()["detail"]["error"]["code"] == "TARGET_NOT_FOUND"
+    # plain sale: 2 rat pelts -> +8g, stacks consumed
+    _give_quest_items(reg["agent_id"], "itm_rat_pelt", 2, "Rat Pelt")
+    before = c.get("/api/v1/status", headers=h).json()["data"]["gold"]
+    done = _sell(c, h, reg["agent_id"], "npc_armorer_sella", "itm_rat_pelt", qty=2)
+    assert done.status_code == 200, done.text
+    assert done.json()["data"]["gold_gained"] == 8
+    st = c.get("/api/v1/status", headers=h).json()["data"]
+    assert st["gold"] == before + 8
+    assert not any(i["item_id"] == "itm_rat_pelt" for i in st["inventory"])
+    # overselling what you hold fails
+    short = _sell(c, h, reg["agent_id"], "npc_armorer_sella", "itm_rat_pelt", qty=1)
+    assert short.json()["detail"]["error"]["code"] == "INVALID_PARAMS"
+    # quest items are reserved: accept ratcatcher (needs 3), hold exactly 3 -> blocked
+    _move(c, h, reg["agent_id"], "riverside_village")
+    _talk(c, h, reg["agent_id"], "npc_blacksmith")
+    _set_hp_and_ready(reg["agent_id"], 25)
+    assert c.post("/api/v1/actions", json={"action": "accept_quest",
+                  "params": {"quest_id": "q_ratcatcher"}}, headers=h).status_code == 200
+    _give_quest_items(reg["agent_id"], "itm_rat_pelt", 3, "Rat Pelt")
+    _move(c, h, reg["agent_id"], "capital_city")
+    _talk(c, h, reg["agent_id"], "npc_armorer_sella")
+    blocked = _sell(c, h, reg["agent_id"], "npc_armorer_sella", "itm_rat_pelt", qty=1)
+    assert blocked.json()["detail"]["error"]["code"] == "INVALID_PARAMS"
+    assert "reserved" in blocked.json()["detail"]["error"]["message"]
+    # surplus above the quest need sells fine: hold 5, sell 2
+    _give_quest_items(reg["agent_id"], "itm_rat_pelt", 2, "Rat Pelt")
+    ok = _sell(c, h, reg["agent_id"], "npc_armorer_sella", "itm_rat_pelt", qty=2)
+    assert ok.status_code == 200, ok.text
+    left = [i for i in c.get("/api/v1/status", headers=h).json()["data"]["inventory"]
+            if i["item_id"] == "itm_rat_pelt"]
+    assert sum(i.get("qty", 0) for i in left) == 3
+
+
+def test_equip_weapon_and_armor_slots_with_defense():
+    from app.engine import player_defense
+    c = fresh_client()
+    reg = register(c, "Tank")
+    h = {"Authorization": f"Bearer {reg['api_key']}"}
+    _move(c, h, reg["agent_id"], "capital_city")
+    _talk(c, h, reg["agent_id"], "npc_armorer_sella")
+    _set_gold(reg["agent_id"], 1000)
+    assert _buy(c, h, reg["agent_id"], "npc_armorer_sella", "itm_short_sword").status_code == 200
+    assert _buy(c, h, reg["agent_id"], "npc_armorer_sella", "itm_cloth_garb").status_code == 200
+    # equip weapon then armor: both stay equipped (separate slots)
+    _set_hp_and_ready(reg["agent_id"], 25)
+    assert c.post("/api/v1/actions", json={"action": "equip_item",
+                  "params": {"item_id": "itm_short_sword"}}, headers=h).status_code == 200
+    _set_hp_and_ready(reg["agent_id"], 25)
+    assert c.post("/api/v1/actions", json={"action": "equip_item",
+                  "params": {"item_id": "itm_cloth_garb"}}, headers=h).status_code == 200
+    inv = c.get("/api/v1/status", headers=h).json()["data"]["inventory"]
+    assert next(i for i in inv if i["item_id"] == "itm_short_sword")["equipped"] is True
+    assert next(i for i in inv if i["item_id"] == "itm_cloth_garb")["equipped"] is True
+    # upgrading weapon keeps the armor on (iron sword needs level 2)
+    _set_level(reg["agent_id"], 2)
+    assert _buy(c, h, reg["agent_id"], "npc_armorer_sella", "itm_iron_sword").status_code == 200
+    _set_hp_and_ready(reg["agent_id"], 25)
+    assert c.post("/api/v1/actions", json={"action": "equip_item",
+                  "params": {"item_id": "itm_iron_sword"}}, headers=h).status_code == 200
+    inv2 = c.get("/api/v1/status", headers=h).json()["data"]["inventory"]
+    assert next(i for i in inv2 if i["item_id"] == "itm_iron_sword")["equipped"] is True
+    assert next(i for i in inv2 if i["item_id"] == "itm_short_sword")["equipped"] is False
+    assert next(i for i in inv2 if i["item_id"] == "itm_cloth_garb")["equipped"] is True
+    # defense math: fixed 5-damage hit reduced by 1 (cloth garb)
+    import app.main as main_module
+    from app.models import Agent as _A, Monster as _M
+    db = SessionLocal()
+    a = db.query(_A).filter(_A.id == reg["agent_id"]).first()
+    assert player_defense(a) == 1
+    db.close()
+    _move(c, h, reg["agent_id"], "riverside_village")
+    _move(c, h, reg["agent_id"], "oakhollow_forest")
+    db = SessionLocal()
+    m = db.query(_M).filter(_M.location == "oakhollow_forest", _M.alive == True).first()  # noqa: E712
+    m.hp = 200
+    m.max_hp = 200
+    mid = m.id
+    db.commit()
+    db.close()
+    real = main_module.monster_attack_damage
+    main_module.monster_attack_damage = lambda m: 5
+    try:
+        _set_hp_and_ready(reg["agent_id"], 25)
+        out = c.post("/api/v1/actions", json={"action": "attack",
+                     "params": {"target_id": mid}}, headers=h).json()
+        assert out["data"]["result"] == "hit"
+        assert out["data"]["damage_taken"] == 4  # 5 - 1 DEF
+    finally:
+        main_module.monster_attack_damage = real
 
 
 def test_accept_requires_talk_at_giver():

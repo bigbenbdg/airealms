@@ -28,27 +28,33 @@ EDGES = [
 
 NPCS = [
     {"npc_id": "npc_blacksmith", "name": "Old Toran", "location": "riverside_village",
-     "can_trade": True, "has_quest": True,
+     "can_trade": False, "has_quest": True,
      "dialogue": "Giant rats nest in Oakhollow Forest and chew through my stock. Bring me 3 Rat Pelts."},
     {"npc_id": "npc_innkeeper", "name": "Mira the Innkeep", "location": "riverside_village",
-     "can_trade": True, "has_quest": False,
+     "can_trade": False, "has_quest": False,
      "dialogue": "Rest up, traveler. The forest is not kind to the wounded."},
     {"npc_id": "npc_captain", "name": "Captain Voss", "location": "capital_city",
      "can_trade": False, "has_quest": True,
      "dialogue": "Trolls in the Deep Cave threaten our trade. Bring me 2 Troll Hides for the city!"},
     {"npc_id": "npc_hermit", "name": "Marsh Hermit", "location": "sunken_marsh",
-     "can_trade": True, "has_quest": True,
+     "can_trade": False, "has_quest": True,
      "dialogue": "The marsh took my lantern. Bring me 2 Wraith Essences and I'll light your way."},
     {"npc_id": "npc_scout", "name": "Scout Liora", "location": "oakhollow_forest",
      "can_trade": False, "has_quest": True,
      "dialogue": "Wolves grow bold and stalk the road. Bring me 3 Wolf Pelts to thin their pride."},
     {"npc_id": "npc_merchant", "name": "Merchant Pella", "location": "capital_city",
-     "can_trade": True, "has_quest": True,
+     "can_trade": False, "has_quest": True,
      "dialogue": "Bandits rob my caravans on the capital road. Bring me 2 Bandit Daggers as proof."},
     {"npc_id": "npc_warden", "name": "Warden Cassia", "location": "ember_ridge",
      "can_trade": False, "has_quest": True,
      "dialogue": "Only proven slayers need apply: bring me a Drake Scale and the ridge is yours."},
+    {"npc_id": "npc_armorer_sella", "name": "Armorer Sella", "location": "capital_city",
+     "can_trade": True, "has_quest": False,
+     "dialogue": "Blades, plate, and potions — tiered for your level. Sell me your monster trophies, too."},
 ]
+
+# The one NPC allowed to trade. All buy_item/sell_item calls must name her.
+MERCHANT_ID = "npc_armorer_sella"
 
 QUESTS = {
     # Item turn-in chain tuned so completing everything carries an agent to ~level 5.
@@ -81,11 +87,93 @@ QUESTS = {
                      "min_level": 5, "giver": "npc_warden"},
 }
 
+# Legacy general-store list (kept for backwards compat; no NPC sells it anymore).
+# All commerce is exclusive to Armorer Sella — see ARMORER_STOCK / MERCHANT_BUYBACK.
 SHOP = [
     {"item_id": "itm_healing_potion", "name": "Healing Potion", "price": 15, "heal": 12},
     {"item_id": "itm_iron_sword", "name": "Iron Sword", "price": 80, "bonus": 3},
     {"item_id": "itm_leather_armor", "name": "Leather Armor", "price": 60, "max_hp_bonus": 5},
 ]
+
+# Armorer Sella's exclusive stock, tiered by minimum level band:
+# T1 (Lv 1-2, cheap), T2 (Lv 3-4, mid), T3 (Lv 5+, best).
+# Weapons carry bonus (+ATK), armors carry defense (+DEF damage reduction),
+# potions carry heal. Bonus and price rise monotonically with tier.
+ARMORER_STOCK = [
+    # --- T1: levels 1-2 ---
+    {"item_id": "itm_short_sword", "name": "Short Sword", "kind": "weapon",
+     "price": 60, "min_level": 1, "bonus": 2},
+    {"item_id": "itm_iron_sword", "name": "Iron Sword", "kind": "weapon",
+     "price": 90, "min_level": 2, "bonus": 3},
+    {"item_id": "itm_cloth_garb", "name": "Cloth Garb", "kind": "armor",
+     "price": 50, "min_level": 1, "defense": 1},
+    {"item_id": "itm_leather_armor", "name": "Leather Armor", "kind": "armor",
+     "price": 80, "min_level": 2, "defense": 2},
+    {"item_id": "itm_healing_potion", "name": "Healing Potion", "kind": "potion",
+     "price": 15, "min_level": 1, "heal": 12},
+    # --- T2: levels 3-4 ---
+    {"item_id": "itm_knight_blade", "name": "Knight Blade", "kind": "weapon",
+     "price": 180, "min_level": 3, "bonus": 5},
+    {"item_id": "itm_rune_sword", "name": "Rune Sword", "kind": "weapon",
+     "price": 250, "min_level": 4, "bonus": 6},
+    {"item_id": "itm_chainmail", "name": "Chainmail", "kind": "armor",
+     "price": 150, "min_level": 3, "defense": 4},
+    {"item_id": "itm_plate_armor", "name": "Plate Armor", "kind": "armor",
+     "price": 220, "min_level": 4, "defense": 5},
+    {"item_id": "itm_greater_potion", "name": "Greater Potion", "kind": "potion",
+     "price": 40, "min_level": 3, "heal": 25},
+    # --- T3: level 5+ ---
+    {"item_id": "itm_dragonslayer", "name": "Dragonslayer", "kind": "weapon",
+     "price": 400, "min_level": 5, "bonus": 9},
+    {"item_id": "itm_ember_greatsword", "name": "Ember Greatsword", "kind": "weapon",
+     "price": 550, "min_level": 5, "bonus": 11},
+    {"item_id": "itm_dragonscale_mail", "name": "Dragonscale Mail", "kind": "armor",
+     "price": 350, "min_level": 5, "defense": 7},
+    {"item_id": "itm_ember_plate", "name": "Ember Plate", "kind": "armor",
+     "price": 500, "min_level": 5, "defense": 9},
+    {"item_id": "itm_elixir", "name": "Elixir", "kind": "potion",
+     "price": 90, "min_level": 5, "heal": 45},
+]
+
+# What the merchant pays for monster trophies, scaled by source-monster
+# strength (weakest drop cheapest). Only these drop IDs are sellable —
+# gear and potions are never bought back (blocks buy->sell gold loops).
+# Prices sit below quest gold rewards so quests stay the best income.
+MERCHANT_BUYBACK = {
+    "itm_rat_pelt": 4,       # Giant Rat (8 HP)
+    "itm_wolf_pelt": 8,      # Forest Wolf (14 HP)
+    "itm_bandit_dagger": 15,  # Road Bandit (16 HP)
+    "itm_wraith_essence": 20,  # Marsh Wraith (22 HP)
+    "itm_troll_hide": 30,    # Cave Troll (30 HP)
+    "itm_drake_scale": 60,   # Ember Drake (45 HP)
+}
+
+
+def merchant_npc():
+    """The single trading NPC dict, or None."""
+    return next((n for n in NPCS if n["npc_id"] == MERCHANT_ID), None)
+
+
+def shop_for(npc_id):
+    """Buyable stock for an NPC: full tiered catalog for the merchant, [] otherwise."""
+    if npc_id == MERCHANT_ID:
+        return [dict(s) for s in ARMORER_STOCK]
+    return []
+
+
+def buys_for(npc_id):
+    """Buyback offers for an NPC: trophy prices for the merchant, [] otherwise."""
+    if npc_id != MERCHANT_ID:
+        return []
+    names = {v["item_id"]: v["name"] for spec in MONSTER_DROPS.values()
+             for v in [spec]}
+    return [{"item_id": iid, "name": names.get(iid, iid), "price": price}
+            for iid, price in MERCHANT_BUYBACK.items()]
+
+
+def stock_spec(item_id):
+    """Catalog spec for a buyable item_id, or None."""
+    return next((s for s in ARMORER_STOCK if s["item_id"] == item_id), None)
 
 STARTER_INVENTORY = [
     {"item_id": "itm_rusty_sword", "name": "Rusty Sword", "qty": 1, "equipped": True, "bonus": 1},
@@ -180,10 +268,17 @@ def seed_ground(db):
 
 
 def ground_item_props(item_id):
-    """Full item props (heal/bonus) for a ground item_id, so pick_up keeps them."""
+    """Full item props (heal/bonus/defense) for a ground item_id, so pick_up keeps them."""
     for g in GROUND_LOOT:
         if g["item_id"] == item_id:
             return {k: v for k, v in g.items() if k not in ("location",)}
+    for s in ARMORER_STOCK:
+        if s["item_id"] == item_id:
+            props = {"item_id": s["item_id"], "name": s["name"], "qty": 1}
+            for k in ("bonus", "defense", "heal"):
+                if k in s:
+                    props[k] = s[k]
+            return props
     for spec in MONSTER_DROPS.values():
         if spec["item_id"] == item_id:
             return {"item_id": spec["item_id"], "name": spec["name"], "qty": 1,

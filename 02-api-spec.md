@@ -313,6 +313,18 @@ sending it, and lets you regenerate SKILLS.md examples automatically.
       "params": { "npc_id": "string" }
     },
     {
+      "name": "buy_item",
+      "description": "Buy an item from the merchant (Armorer Sella in Capital City). Must stand with her after talk_to_npc; item must meet your level.",
+      "cooldown_seconds": 3,
+      "params": { "npc_id": "string (merchant npc_id)", "item_id": "string" }
+    },
+    {
+      "name": "sell_item",
+      "description": "Sell a monster trophy to the merchant (Armorer Sella in Capital City). Must stand with her after talk_to_npc.",
+      "cooldown_seconds": 2,
+      "params": { "npc_id": "string (merchant npc_id)", "item_id": "string", "qty": "integer (optional, default 1)" }
+    },
+    {
       "name": "accept_quest",
       "description": "Accept a quest from its giver: must be at the giver NPC's location after talk_to_npc.",
       "cooldown_seconds": 2,
@@ -393,7 +405,7 @@ If the action violates a cooldown, targeting rule, or precondition, the
 server returns the corresponding error code from §Errors above instead of
 partial state changes — actions are atomic. Missing required params
 (`attack`→`target_id`, `move`/`scout`→`to`, `say`→`message`, `*_quest`→`quest_id`,
-`talk_to_npc`→`npc_id`, item actions→`item_id`) fail fast with
+`talk_to_npc`→`npc_id`, `buy_item`/`sell_item`→`npc_id`+`item_id`, other item actions→`item_id`) fail fast with
 `INVALID_PARAMS` naming what's missing.
 
 Village regeneration: if the agent ends the action in a town location
@@ -407,7 +419,14 @@ properties (potion heals, weapon bonuses). Absent item → `TARGET_NOT_FOUND`.
 `pick_up` is only for these pre-seeded ground piles — monster kill drops
 never need it (they auto-loot on the killing blow).
 
-`talk_to_npc` returns `{npc, dialogue, shop, quests_offered}`. Each entry in
+`talk_to_npc` returns `{npc, dialogue, shop, buys, quests_offered}`. Commerce
+is exclusive to one merchant — Armorer Sella (`npc_armorer_sella`) in Capital
+City: her `shop` holds the tiered catalog (weapons with `bonus` +ATK, armor
+with `defense` +DEF damage reduction, potions with `heal`), each entry flagged
+`level_ok` and gated by `min_level` (T1 levels 1–2, T2 levels 3–4, T3 level 5+;
+bonus and price rise with tier). Her `buys` lists trophy buyback prices
+(Rat Pelt 4g → Drake Scale 60g, scaled by source-monster strength). Every
+other NPC returns empty `shop`/`buys` (quest/lore only). Each entry in
 `quests_offered` carries the full terms (`item_id`, `item_name`, `count`)
 plus `level_ok` and a `status`
 (`available`/`in_progress`/`locked`/`completed`). The NPC reacts to your
@@ -421,6 +440,21 @@ holding enough items checks the quest in (`ready_talk`) so a following
 `turn_in_quest` at the same place succeeds. Accepting or turning in away
 from the giver fails with `WRONG_LOCATION`; skipping the talk fails with
 `TALK_FIRST`.
+
+`buy_item` (`npc_id`, `item_id`) buys one catalog copy from the merchant:
+must stand with her after `talk_to_npc` there (`WRONG_LOCATION` /
+`TALK_FIRST` otherwise, naming her and Capital City), meet the item's
+`min_level` (`QUEST_LOCKED`, status 403), and hold enough gold
+(`NOT_ENOUGH_GOLD`). The copy lands unequipped — wield it via `equip_item`
+(weapons and armor use separate slots, so a blade and a plate stay on
+together; armor `defense` subtracts from each monster hit, minimum 1 damage).
+
+`sell_item` (`npc_id`, `item_id`, optional `qty`, default 1) sells monster
+trophies back to the merchant under the same presence gates. Only trophy
+drops are bought (gear/potions never are — no buy→sell loops). Items reserved
+for an active quest can't be sold: you must keep up to the quest's `count`
+copies (surplus above it sells fine); overselling fails with `INVALID_PARAMS`.
+Consumption takes unequipped copies first, then equipped.
 
 `scout` returns `{result: "scouted", location, intel}` where `intel` is the
 `/world/state` zone snapshot for the adjacent target, plus a narrative

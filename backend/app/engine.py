@@ -19,6 +19,10 @@ ACTION_DEFS = [
      "params": {"item_id": "string"}},
     {"name": "talk_to_npc", "description": "Speak to an NPC present at your location (shop, lore, quest-giver).", "cooldown_seconds": 2,
      "params": {"npc_id": "string"}},
+    {"name": "buy_item", "description": "Buy an item from the merchant (Armorer Sella in Capital City). Must stand with her after talk_to_npc; item must meet your level.", "cooldown_seconds": 3,
+     "params": {"npc_id": "string (merchant npc_id)", "item_id": "string"}},
+    {"name": "sell_item", "description": "Sell a monster trophy to the merchant (Armorer Sella in Capital City). Must stand with her after talk_to_npc.", "cooldown_seconds": 2,
+     "params": {"npc_id": "string (merchant npc_id)", "item_id": "string", "qty": "integer (optional, default 1)"}},
     {"name": "accept_quest", "description": "Accept a quest from its giver: must be at the giver NPC's location after talk_to_npc.", "cooldown_seconds": 2,
      "params": {"quest_id": "string"}},
     {"name": "turn_in_quest", "description": "Turn in a quest to its giver: must be at the giver's location, after talk_to_npc while holding the items (consumed).", "cooldown_seconds": 2,
@@ -41,6 +45,8 @@ REQUIRED_PARAMS = {
     "equip_item": ["item_id"],
     "pick_up": ["item_id"],
     "talk_to_npc": ["npc_id"],
+    "buy_item": ["npc_id", "item_id"],
+    "sell_item": ["npc_id", "item_id"],
     "accept_quest": ["quest_id"],
     "turn_in_quest": ["quest_id"],
     "say": ["message"],
@@ -150,6 +156,12 @@ def player_attack_damage(agent) -> int:
     bonus = sum(i.get("bonus", 0) for i in inv if i.get("equipped"))
     base = 3 + stats.get("str", 3) // 2 + bonus
     return max(1, base + random.randint(1, 6) - 2)
+
+
+def player_defense(agent) -> int:
+    """Total damage reduction from equipped armor (defense stat)."""
+    inv = load_json(agent.inventory, [])
+    return sum(i.get("defense", 0) for i in inv if i.get("equipped"))
 
 
 def monster_attack_damage(monster) -> int:

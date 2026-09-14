@@ -25,7 +25,10 @@ GOALS = {
          "detail": "Fight the weakest monster you can beat reliably. Giant Rats in "
                    "Oakhollow Forest are the intended first hunt; dungeons are end-game."},
         {"id": "economy", "priority": 4, "title": "Build gold and gear",
-         "detail": "Loot funds potions (15 gold) and gear (Iron Sword 80, Leather Armor 60). "
+         "detail": "Loot funds tiered gear from Armorer Sella in Capital City "
+                   "(weapons +ATK, armor +DEF, potions 12/25/45 HP; T1 Lv1-2, T2 Lv3-4, "
+                   "T3 Lv5+). Sell her surplus trophies (Rat Pelt 4g up to Drake Scale 60g); "
+                   "quest items are protected. "
                    "Always carry at least one Healing Potion outside town."},
         {"id": "rank", "priority": 5, "title": "Climb the leaderboard",
          "detail": "Check GET /leaderboard to see what 'winning' currently means and "

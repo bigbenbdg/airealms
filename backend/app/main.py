@@ -13,11 +13,13 @@ from sqlalchemy import desc
 from .db import Base, engine, get_db, SessionLocal, ensure_schema
 from .models import Agent, Monster, GroundItem, WorldEvent, utcnow
 from .seed import (LOCATIONS, EDGES, NPCS, QUESTS, SHOP, STARTER_INVENTORY,
+                   MERCHANT_ID, ARMORER_STOCK, MERCHANT_BUYBACK,
+                   merchant_npc, shop_for, buys_for, stock_spec,
                    seed_monsters, seed_ground, exits_from, loc_by_id, quest_brief, roll_drop,
                    MONSTER_DROPS, ground_item_props, danger_of, quests_at, monster_haunts,
                    monster_for_item)
 from .engine import (ACTION_DEFS, check_rate_limit, check_idempotency, store_idempotency,
-                     load_json, apply_xp, player_attack_damage, monster_attack_damage,
+                     load_json, apply_xp, player_attack_damage, player_defense, monster_attack_damage,
                      set_cooldown, cooldown_remaining, manager, xp_for_level,
                      VILLAGE_REGEN_HP, respawn_due, REQUIRED_PARAMS)
 from .goals import GOALS, realm_goal_text, death_report
@@ -493,7 +495,7 @@ def _apply_action(db, agent, action, params):
                     "target_hp_remaining": 0, "self_hp_remaining": agent.hp,
                     "xp_gained": m.xp_reward,
                     "loot": {"gold": m.gold_reward, "items": loot_items}}, msg
-        ret = monster_attack_damage(m)
+        ret = max(1, monster_attack_damage(m) - player_defense(agent))
         agent.hp -= ret
         if agent.hp <= 0:
             agent.hp = 0
@@ -533,15 +535,144 @@ def _apply_action(db, agent, action, params):
         item = next((i for i in inv if i["item_id"] == iid), None)
         if not item:
             err("TARGET_NOT_FOUND", f"You don't have '{iid}'.")
-        for i in inv:
-            if i.get("bonus"):
-                i["equipped"] = (i["item_id"] == iid)
-        if item.get("max_hp_bonus"):
+        if item.get("bonus"):
+            # Weapon slot: one blade at a time; armor stays equipped.
+            for i in inv:
+                if i.get("bonus"):
+                    i["equipped"] = (i["item_id"] == iid)
+        elif item.get("defense"):
+            # Armor slot: one plate at a time; weapon stays equipped.
+            for i in inv:
+                if i.get("defense"):
+                    i["equipped"] = (i["item_id"] == iid)
+        elif item.get("max_hp_bonus"):
+            # Legacy armor (pre-tiered Leather Armor): consume into max HP.
             agent.max_hp += item["max_hp_bonus"]
             item.pop("max_hp_bonus")
             item["equipped"] = True
+        else:
+            err("INVALID_PARAMS", f"{item['name']} isn't equippable. Equip a weapon (+ATK) or armor (+DEF).")
         save_inv()
         return {"result": "equipped", "item_id": iid}, f"You equip the {item['name']}."
+
+    if action == "buy_item":
+        nid = params.get("npc_id", "")
+        iid = params.get("item_id", "")
+        npc = next((n for n in NPCS if n["npc_id"] == nid), None)
+        if npc is None or nid != MERCHANT_ID:
+            merch = merchant_npc()
+            where = loc_by_id(merch["location"])["name"] if merch else "the Capital City"
+            who = f"{merch['name']} ({MERCHANT_ID})" if merch else "the merchant"
+            err("TARGET_NOT_FOUND", f"'{nid or '???'}' doesn't trade. All commerce is exclusive "
+                                    f"to {who} in {where}: talk_to_npc there, then buy_item.")
+        spec = stock_spec(iid)
+        if not spec:
+            err("TARGET_NOT_FOUND", f"'{iid}' is not in {npc['name']}'s stock. "
+                                    f"Check talk_to_npc shop first.")
+        if agent.location != npc["location"]:
+            place = loc_by_id(npc["location"])
+            pname = place["name"] if place else npc["location"]
+            err("WRONG_LOCATION", f"Buying must happen at {pname}: find {npc['name']} "
+                                  f"({nid}) there and talk_to_npc first.")
+        if not _talked_here(agent, nid):
+            err("TALK_FIRST", f"Talk to {npc['name']} ({nid}) here first "
+                              f"(talk_to_npc), then buy_item.")
+        need = spec.get("min_level", 1)
+        if agent.level < need:
+            err("QUEST_LOCKED", f"'{spec['name']}' requires level {need} (you are level {agent.level}). "
+                                f"Level up first — try easier quests or weaker monsters.", status=403)
+        price = spec["price"]
+        if agent.gold < price:
+            err("NOT_ENOUGH_GOLD", f"'{spec['name']}' costs {price} gold, you hold {agent.gold}. "
+                                   f"Earn more: sell surplus trophies or finish quests.")
+        agent.gold -= price
+        entry = {"item_id": spec["item_id"], "name": spec["name"],
+                 "qty": 1, "equipped": False}
+        for k in ("bonus", "defense", "heal", "kind"):
+            if k in spec:
+                entry[k] = spec[k]
+        have = next((i for i in inv if i["item_id"] == iid), None)
+        if have:
+            have["qty"] = have.get("qty", 0) + 1
+            # bought copies arrive unequipped; keep existing equip state
+            for k in ("bonus", "defense", "heal", "kind", "name"):
+                if k in entry:
+                    have.setdefault(k, entry[k])
+        else:
+            inv.append(entry)
+        save_inv()
+        _queue(emit(db, "loot", agent.name, agent.id,
+                    f"{agent.name} bought {spec['name']} for {price} gold."))
+        return {"result": "bought", "item_id": iid, "price": price,
+                "gold_remaining": agent.gold}, \
+               f"You buy {spec['name']} for {price} gold ({agent.gold} left). Equip it with equip_item."
+
+    if action == "sell_item":
+        nid = params.get("npc_id", "")
+        iid = params.get("item_id", "")
+        try:
+            qty = int(params.get("qty", 1))
+        except (TypeError, ValueError):
+            err("INVALID_PARAMS", "qty must be an integer.")
+        if qty < 1:
+            err("INVALID_PARAMS", "qty must be at least 1.")
+        npc = next((n for n in NPCS if n["npc_id"] == nid), None)
+        if npc is None or nid != MERCHANT_ID:
+            merch = merchant_npc()
+            where = loc_by_id(merch["location"])["name"] if merch else "the Capital City"
+            who = f"{merch['name']} ({MERCHANT_ID})" if merch else "the merchant"
+            err("TARGET_NOT_FOUND", f"'{nid or '???'}' doesn't trade. All commerce is exclusive "
+                                    f"to {who} in {where}: talk_to_npc there, then sell_item.")
+        price = MERCHANT_BUYBACK.get(iid)
+        if price is None:
+            err("TARGET_NOT_FOUND", f"{npc['name']} doesn't buy '{iid}'. She buys monster trophies "
+                                    f"(pelts, daggers, hides, essences, scales) — check talk_to_npc buys.")
+        if agent.location != npc["location"]:
+            place = loc_by_id(npc["location"])
+            pname = place["name"] if place else npc["location"]
+            err("WRONG_LOCATION", f"Selling must happen at {pname}: find {npc['name']} "
+                                  f"({nid}) there and talk_to_npc first.")
+        if not _talked_here(agent, nid):
+            err("TALK_FIRST", f"Talk to {npc['name']} ({nid}) here first "
+                              f"(talk_to_npc), then sell_item.")
+        have_qty = sum(i.get("qty", 0) for i in inv if i.get("item_id") == iid)
+        if have_qty < qty:
+            err("INVALID_PARAMS", f"You hold {have_qty}x '{iid}', can't sell {qty}.")
+        # Quest protection: active quests reserve up to `count` copies —
+        # only the surplus above the largest active need may be sold.
+        reserved = 0
+        reserving = None
+        for q in quests:
+            if q.get("done"):
+                continue
+            spec = QUESTS.get(q.get("quest_id", ""))
+            if spec and spec.get("item_id") == iid:
+                if spec["count"] > reserved:
+                    reserved, reserving = spec["count"], spec["title"]
+        sellable = have_qty - reserved
+        if qty > sellable:
+            err("INVALID_PARAMS", f"{qty}x is reserved for '{reserving}': you hold {have_qty}, "
+                                  f"the quest needs {reserved}. Sell at most {max(sellable, 0)}.")
+        # Consume unequipped copies first, then equipped (as with quest turn-ins).
+        need = qty
+        for item in sorted(inv, key=lambda i: bool(i.get("equipped"))):
+            if need <= 0:
+                break
+            if item.get("item_id") != iid:
+                continue
+            take = min(item.get("qty", 0), need)
+            item["qty"] -= take
+            need -= take
+        inv[:] = [i for i in inv if i.get("qty", 0) > 0]
+        save_inv()
+        gain = price * qty
+        agent.gold += gain
+        iname = next((s["name"] for s in buys_for(nid) if s["item_id"] == iid), iid)
+        _queue(emit(db, "loot", agent.name, agent.id,
+                    f"{agent.name} sold {qty}x {iname} for {gain} gold."))
+        return {"result": "sold", "item_id": iid, "qty": qty,
+                "gold_gained": gain, "gold_total": agent.gold}, \
+               f"You sell {qty}x {iname} for {gain} gold (now {agent.gold})."
 
     if action == "pick_up":
         iid = params.get("item_id", "")
@@ -565,7 +696,12 @@ def _apply_action(db, agent, action, params):
         npc = next((n for n in NPCS if n["npc_id"] == nid and n["location"] == agent.location), None)
         if not npc:
             err("TARGET_NOT_FOUND", f"No NPC '{nid}' here.")
-        shop = [s for s in SHOP] if npc.get("can_trade") else []
+        # Commerce is exclusive to the merchant: her talk shows the tiered
+        # catalog (each entry flagged level_ok) plus trophy buyback prices;
+        # every other NPC shows an empty shop.
+        shop = [{**s, "level_ok": agent.level >= s.get("min_level", 1)}
+                for s in shop_for(nid)]
+        buys = buys_for(nid)
         offered = [q for qid, q in QUESTS.items() if q["giver"] == nid]
         mine = {q["quest_id"]: q for q in quests}
         lines, offers = [], []
@@ -628,6 +764,7 @@ def _apply_action(db, agent, action, params):
                              f"Use turn_in_quest [{qid}] to hand them over. ")
         narrative = f"{npc['name']} says: \"{npc['dialogue']}\" " + "".join(lines).strip()
         return {"npc": npc["name"], "dialogue": npc["dialogue"], "shop": shop,
+                "buys": buys,
                 "quests_offered": offers}, narrative
 
     if action == "accept_quest":
