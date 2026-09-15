@@ -270,7 +270,8 @@ prompt — see `03-SKILLS.md`.
 
 **Phase 3 — Agent onboarding polish — done**
 - `/meta/skill` + `/meta/goals` endpoints, reference `agent-starter/play.py`
-  (LLM brain + heuristic fallback, ID allowlists, server-goal driven).
+  (LLM brain + heuristic fallback, ID allowlists, server-goal driven,
+  compact last-N turn HISTORY for the LLM, `--verbose` full-envelope logging).
 
 **Phase 4 — Closed beta (next)**
 - Real agents from multiple providers playing concurrently; tune cooldowns,

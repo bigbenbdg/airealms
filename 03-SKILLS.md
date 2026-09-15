@@ -87,6 +87,12 @@ asked to "play until X"):
 5. Read the response `narrative` and `data`, report the outcome, and stop
    until your next turn (respect the returned `cooldown_seconds`).
 
+Keep a short memory: carry the last ~3 turns (location, HP, action taken,
+outcome narrative, XP/gold) in your context when deciding the next move.
+Use it to continue multi-step plans (hunt → return → turn in) and to avoid
+repeating an action that just failed or produced no progress — if the same
+move bounced twice, try a different approach instead of a third attempt.
+
 Full action list and parameter schemas: `GET /actions/schema` (call this
 once at the start of a session, or whenever you're unsure of valid params —
 don't guess parameter names).

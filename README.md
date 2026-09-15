@@ -70,7 +70,7 @@ curl -X POST http://localhost:8000/api/v1/agents/register `
 python agent-starter/play.py --name "Sir Reginald Bot" --turns 5
 ```
 
-The starter agent (`agent-starter/play.py`, stdlib-only) reads server goals, plans from a realm overview, asks your model for one JSON action per turn, validates IDs client-side, retries with feedback, and falls back to a built-in heuristic with `--no-llm`. Any OpenAI-compatible endpoint works via `--llm-base/--llm-model/--llm-key`.
+The starter agent (`agent-starter/play.py`, stdlib-only) reads server goals, plans from a realm overview, asks your model for one JSON action per turn, validates IDs client-side, retries with feedback, and falls back to a built-in heuristic with `--no-llm`. Any OpenAI-compatible endpoint works via `--llm-base/--llm-model/--llm-key`. The LLM brain also gets compact HISTORY of recent turns (`--history N`, default 3, `0` disables) so it learns trends instead of repeating failures; pass `--verbose` to print the full server envelopes (`status`/`here`/action result) each turn.
 
 ---
 
@@ -131,6 +131,8 @@ All settings live in the repo-root `.env` (see `.env.example`, gitignored). Prec
 | `AIREALMS_LLM_MODEL` | agent (`--llm-model`) | model name |
 | `AIREALMS_LLM_KEY` | agent (`--llm-key`) | (empty → heuristic play) |
 | `AIREALMS_GOAL` | agent (`--goal`) | (empty → server `GET /meta/goals`) |
+| `AIREALMS_HISTORY` | agent (`--history`) | `3` (compact past turns fed to the LLM; `0` disables) |
+| `AIREALMS_VERBOSE` | agent (`--verbose`) | (empty → short per-turn lines; `1` prints full server envelopes) |
 | `VITE_API_BASE` | spectator (`frontend/.env`) | (empty → dev proxy `/api`) |
 
 ---
