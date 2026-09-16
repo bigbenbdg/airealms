@@ -1,0 +1,332 @@
+{
+  "version": "1.0.0",
+  "description": "Complete game asset inventory for AI Realms — every visual needed by agent-starter/play.py. No image files exist yet; 'file' is the suggested path.",
+  "counts": {
+    "locations": 6,
+    "monsters": 6,
+    "npcs": 8,
+    "items": 22,
+    "total": 42
+  },
+  "locations": [
+    {
+      "id": "riverside_village",
+      "name": "Riverside Village",
+      "type": "town",
+      "file": "assets/locations/riverside_village.svg"
+    },
+    {
+      "id": "oakhollow_forest",
+      "name": "Oakhollow Forest",
+      "type": "wild",
+      "file": "assets/locations/oakhollow_forest.svg"
+    },
+    {
+      "id": "capital_city",
+      "name": "Capital City",
+      "type": "town",
+      "file": "assets/locations/capital_city.svg"
+    },
+    {
+      "id": "deep_cave",
+      "name": "Deep Cave",
+      "type": "dungeon",
+      "file": "assets/locations/deep_cave.svg"
+    },
+    {
+      "id": "sunken_marsh",
+      "name": "Sunken Marsh",
+      "type": "wild",
+      "file": "assets/locations/sunken_marsh.svg"
+    },
+    {
+      "id": "ember_ridge",
+      "name": "Ember Ridge",
+      "type": "dungeon",
+      "file": "assets/locations/ember_ridge.svg"
+    }
+  ],
+  "monsters": [
+    {
+      "name": "Giant Rat",
+      "zones": ["oakhollow_forest"],
+      "hp": 8,
+      "drop": { "item_id": "itm_rat_pelt", "name": "Rat Pelt", "chance": 1.0 },
+      "file": "assets/monsters/giant_rat.svg"
+    },
+    {
+      "name": "Forest Wolf",
+      "zones": ["oakhollow_forest"],
+      "hp": 14,
+      "drop": { "item_id": "itm_wolf_pelt", "name": "Wolf Pelt", "chance": 0.6 },
+      "file": "assets/monsters/forest_wolf.svg"
+    },
+    {
+      "name": "Road Bandit",
+      "zones": ["capital_city"],
+      "hp": 16,
+      "drop": { "item_id": "itm_bandit_dagger", "name": "Bandit Dagger", "chance": 0.5 },
+      "file": "assets/monsters/road_bandit.svg"
+    },
+    {
+      "name": "Marsh Wraith",
+      "zones": ["sunken_marsh"],
+      "hp": 22,
+      "drop": { "item_id": "itm_wraith_essence", "name": "Wraith Essence", "chance": 0.7 },
+      "file": "assets/monsters/marsh_wraith.svg"
+    },
+    {
+      "name": "Cave Troll",
+      "zones": ["deep_cave"],
+      "hp": 30,
+      "drop": { "item_id": "itm_troll_hide", "name": "Troll Hide", "chance": 0.8 },
+      "file": "assets/monsters/cave_troll.svg"
+    },
+    {
+      "name": "Ember Drake",
+      "zones": ["ember_ridge"],
+      "hp": 45,
+      "drop": { "item_id": "itm_drake_scale", "name": "Drake Scale", "chance": 0.6 },
+      "file": "assets/monsters/ember_drake.svg"
+    }
+  ],
+  "npcs": [
+    {
+      "npc_id": "npc_blacksmith",
+      "name": "Old Toran",
+      "location": "riverside_village",
+      "role": "quest-giver",
+      "file": "assets/npcs/npc_blacksmith.svg"
+    },
+    {
+      "npc_id": "npc_innkeeper",
+      "name": "Mira the Innkeep",
+      "location": "riverside_village",
+      "role": "lore",
+      "file": "assets/npcs/npc_innkeeper.svg"
+    },
+    {
+      "npc_id": "npc_armorer_sella",
+      "name": "Armorer Sella",
+      "location": "riverside_village",
+      "role": "merchant",
+      "file": "assets/npcs/npc_armorer_sella.svg"
+    },
+    {
+      "npc_id": "npc_scout",
+      "name": "Scout Liora",
+      "location": "oakhollow_forest",
+      "role": "quest-giver",
+      "file": "assets/npcs/npc_scout.svg"
+    },
+    {
+      "npc_id": "npc_captain",
+      "name": "Captain Voss",
+      "location": "capital_city",
+      "role": "quest-giver",
+      "file": "assets/npcs/npc_captain.svg"
+    },
+    {
+      "npc_id": "npc_merchant",
+      "name": "Merchant Pella",
+      "location": "capital_city",
+      "role": "quest-giver",
+      "file": "assets/npcs/npc_merchant.svg"
+    },
+    {
+      "npc_id": "npc_hermit",
+      "name": "Marsh Hermit",
+      "location": "sunken_marsh",
+      "role": "quest-giver",
+      "file": "assets/npcs/npc_hermit.svg"
+    },
+    {
+      "npc_id": "npc_warden",
+      "name": "Warden Cassia",
+      "location": "ember_ridge",
+      "role": "quest-giver",
+      "file": "assets/npcs/npc_warden.svg"
+    }
+  ],
+  "items": [
+    {
+      "item_id": "itm_rat_pelt",
+      "name": "Rat Pelt",
+      "kind": "trophy",
+      "file": "assets/items/itm_rat_pelt.svg"
+    },
+    {
+      "item_id": "itm_wolf_pelt",
+      "name": "Wolf Pelt",
+      "kind": "trophy",
+      "file": "assets/items/itm_wolf_pelt.svg"
+    },
+    {
+      "item_id": "itm_bandit_dagger",
+      "name": "Bandit Dagger",
+      "kind": "weapon",
+      "attack": 2,
+      "file": "assets/items/itm_bandit_dagger.svg"
+    },
+    {
+      "item_id": "itm_troll_hide",
+      "name": "Troll Hide",
+      "kind": "trophy",
+      "file": "assets/items/itm_troll_hide.svg"
+    },
+    {
+      "item_id": "itm_wraith_essence",
+      "name": "Wraith Essence",
+      "kind": "trophy",
+      "file": "assets/items/itm_wraith_essence.svg"
+    },
+    {
+      "item_id": "itm_drake_scale",
+      "name": "Drake Scale",
+      "kind": "trophy",
+      "file": "assets/items/itm_drake_scale.svg"
+    },
+    {
+      "item_id": "itm_rusty_sword",
+      "name": "Rusty Sword",
+      "kind": "weapon",
+      "attack": 1,
+      "file": "assets/items/itm_rusty_sword.svg"
+    },
+    {
+      "item_id": "itm_short_sword",
+      "name": "Short Sword",
+      "kind": "weapon",
+      "attack": 2,
+      "price": 60,
+      "min_level": 1,
+      "file": "assets/items/itm_short_sword.svg"
+    },
+    {
+      "item_id": "itm_iron_sword",
+      "name": "Iron Sword",
+      "kind": "weapon",
+      "attack": 3,
+      "price": 90,
+      "min_level": 2,
+      "file": "assets/items/itm_iron_sword.svg"
+    },
+    {
+      "item_id": "itm_cloth_garb",
+      "name": "Cloth Garb",
+      "kind": "armor",
+      "defense": 1,
+      "price": 50,
+      "min_level": 1,
+      "file": "assets/items/itm_cloth_garb.svg"
+    },
+    {
+      "item_id": "itm_leather_armor",
+      "name": "Leather Armor",
+      "kind": "armor",
+      "defense": 2,
+      "price": 80,
+      "min_level": 2,
+      "file": "assets/items/itm_leather_armor.svg"
+    },
+    {
+      "item_id": "itm_knight_blade",
+      "name": "Knight Blade",
+      "kind": "weapon",
+      "attack": 5,
+      "price": 180,
+      "min_level": 3,
+      "file": "assets/items/itm_knight_blade.svg"
+    },
+    {
+      "item_id": "itm_rune_sword",
+      "name": "Rune Sword",
+      "kind": "weapon",
+      "attack": 6,
+      "price": 250,
+      "min_level": 4,
+      "file": "assets/items/itm_rune_sword.svg"
+    },
+    {
+      "item_id": "itm_chainmail",
+      "name": "Chainmail",
+      "kind": "armor",
+      "defense": 4,
+      "price": 150,
+      "min_level": 3,
+      "file": "assets/items/itm_chainmail.svg"
+    },
+    {
+      "item_id": "itm_plate_armor",
+      "name": "Plate Armor",
+      "kind": "armor",
+      "defense": 5,
+      "price": 220,
+      "min_level": 4,
+      "file": "assets/items/itm_plate_armor.svg"
+    },
+    {
+      "item_id": "itm_dragonslayer",
+      "name": "Dragonslayer",
+      "kind": "weapon",
+      "attack": 9,
+      "price": 400,
+      "min_level": 5,
+      "file": "assets/items/itm_dragonslayer.svg"
+    },
+    {
+      "item_id": "itm_ember_greatsword",
+      "name": "Ember Greatsword",
+      "kind": "weapon",
+      "attack": 11,
+      "price": 550,
+      "min_level": 5,
+      "file": "assets/items/itm_ember_greatsword.svg"
+    },
+    {
+      "item_id": "itm_dragonscale_mail",
+      "name": "Dragonscale Mail",
+      "kind": "armor",
+      "defense": 7,
+      "price": 350,
+      "min_level": 5,
+      "file": "assets/items/itm_dragonscale_mail.svg"
+    },
+    {
+      "item_id": "itm_ember_plate",
+      "name": "Ember Plate",
+      "kind": "armor",
+      "defense": 9,
+      "price": 500,
+      "min_level": 5,
+      "file": "assets/items/itm_ember_plate.svg"
+    },
+    {
+      "item_id": "itm_healing_potion",
+      "name": "Healing Potion",
+      "kind": "potion",
+      "heal": 12,
+      "price": 15,
+      "min_level": 1,
+      "file": "assets/items/itm_healing_potion.svg"
+    },
+    {
+      "item_id": "itm_greater_potion",
+      "name": "Greater Potion",
+      "kind": "potion",
+      "heal": 25,
+      "price": 40,
+      "min_level": 3,
+      "file": "assets/items/itm_greater_potion.svg"
+    },
+    {
+      "item_id": "itm_elixir",
+      "name": "Elixir",
+      "kind": "potion",
+      "heal": 45,
+      "price": 90,
+      "min_level": 5,
+      "file": "assets/items/itm_elixir.svg"
+    }
+  ]
+}
