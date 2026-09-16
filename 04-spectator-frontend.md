@@ -41,6 +41,12 @@ the shape and interactions are concrete rather than theoretical.
   agent dot per character (ring color = level tier, capped at 6 + overflow
   badge). No canvas, no image assets.
 
+> Note: the agent-side viewer (`agent-starter/engines/viewer.py`, `play.py
+> --view`) is separate from this SPA and does use image assets — one
+> Blender-rendered backdrop per location under `assets/backgrounds/`. Those
+> PNGs are available to the SPA too (served at `/assets/...`) if it ever
+> wants illustrated zone backdrops; the map above stays SVG-only by design.
+
 ## Design notes (carried into the prototype)
 
 - Treated as a chronicle/observatory, not a SaaS dashboard: serif display

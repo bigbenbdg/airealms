@@ -155,15 +155,26 @@ def main():
     for item in inv.get("items", []):
         jobs.append((item["file"], item_svg(item)))
 
+    # Blender-rendered map backgrounds (scripts/make_backgrounds.py) are
+    # checked for presence but never generated here — they need Blender.
+    backgrounds = inv.get("backgrounds", {}) or {}
     missing = [rel for rel, _ in jobs
                if not os.path.exists(os.path.join(ROOT, rel))]
+    missing_bg = [rel for rel in backgrounds.values()
+                  if not os.path.exists(os.path.join(ROOT, rel))]
     if check_only:
         if missing:
             print(f"Missing {len(missing)} asset files:")
             for m in missing:
                 print(f"  {m}")
+        if missing_bg:
+            print(f"Missing {len(missing_bg)} background files "
+                  f"(run in Blender: scripts/make_backgrounds.py):")
+            for m in missing_bg:
+                print(f"  {m}")
+        if missing or missing_bg:
             return 1
-        print(f"All {len(jobs)} asset files present.")
+        print(f"All {len(jobs)} asset files + {len(backgrounds)} backgrounds present.")
         return 0
 
     for rel, content in jobs:
@@ -173,7 +184,7 @@ def main():
             f.write(content)
 
     manifest = {"version": inv.get("version", "1.0.0"), "locations": {},
-                "monsters": {}, "npcs": {}, "items": {}}
+                "monsters": {}, "npcs": {}, "items": {}, "backgrounds": {}}
     for loc in inv.get("locations", []):
         manifest["locations"][loc["id"]] = loc["file"]
     for mon in inv.get("monsters", []):
@@ -183,6 +194,8 @@ def main():
         manifest["npcs"][npc["npc_id"]] = npc["file"]
     for item in inv.get("items", []):
         manifest["items"][item["item_id"]] = item["file"]
+    for loc_id, rel in backgrounds.items():
+        manifest["backgrounds"][loc_id] = rel
     with open(os.path.join(ASSETS_DIR, "manifest.json"), "w",
               encoding="utf-8", newline="\n") as f:
         json.dump(manifest, f, indent=2)

@@ -1,18 +1,18 @@
 """In-game viewer for the reference agent (stdlib only).
 
-`python play.py --view` writes a self-contained `viewer.html` every turn
-(SVG art inlined, so no web server or asset paths needed) and opens it
-once in your browser. The page auto-refreshes via `<meta refresh>`, so it
-plays like a little side-view game scene while the CLI loop runs:
+`python play.py --view` writes a self-contained `viewer.html` every turn and
+opens it once in your browser. The page auto-refreshes via `<meta refresh>`,
+so it plays like a little side-view game scene while the CLI loop runs:
 
-  background (trees / town / cave) + road ── character, monsters, loot,
-  NPCs standing on one stage, with HP bars and names, then the HUD panels
-  (pack, quests, adventure log) underneath.
+  Blender-rendered map background (assets/backgrounds/<loc>.png) or a
+  procedurally drawn one when that art is missing, with the character,
+  monsters, loot and NPCs standing on the scene's ground line, then the HUD
+  panels (pack, quests, adventure log) underneath.
 
-Fallback-first like engines/assets.py: missing SVGs become shapes/emoji,
-missing state becomes "?", and no exception ever escapes into the turn loop.
-Set AIREALMS_NO_BROWSER=1 to write the file without popping a browser
-(useful for tests / headless runs).
+Fallback-first like engines/assets.py: missing PNGs fall back to drawn
+terrain, missing SVGs become shapes/emoji, missing state becomes "?", and no
+exception ever escapes into the turn loop. Set AIREALMS_NO_BROWSER=1 to write
+the file without popping a browser (useful for tests / headless runs).
 """
 import html
 import os
@@ -34,12 +34,42 @@ SKY = {"town": "#1E2436", "wild": "#16241F", "dungeon": "#1A1218"}
 GROUND = {"town": "#141824", "wild": "#101812", "dungeon": "#120D12"}
 DECOR = {"town": GOLD, "wild": VERDIGRIS, "dungeon": BLOOD}
 
+STAGE_W, STAGE_H = 960, 380
+# Ground line per location, in stage coordinates. Must match the Blender
+# backgrounds (scripts/make_backgrounds.py) so tokens stand on the terrain.
+BASELINE = {
+    "riverside_village": 308,
+    "sunken_marsh": 321,
+    "oakhollow_forest": 366,
+    "capital_city": 366,
+    "deep_cave": 366,
+    "ember_ridge": 366,
+}
+DEFAULT_BASELINE = 360
+
+LOCATION_TYPE = {
+    "riverside_village": "town", "capital_city": "town",
+    "oakhollow_forest": "wild", "sunken_marsh": "wild",
+    "deep_cave": "dungeon", "ember_ridge": "dungeon",
+}
+
 
 def _esc(value):
     try:
         return html.escape(str(value), quote=True)
     except Exception:
         return "?"
+
+
+def _file_url(path):
+    """file:/// URL for an absolute path (Windows-safe)."""
+    try:
+        p = os.path.abspath(path).replace("\\", "/")
+        if not p.startswith("/"):
+            p = "/" + p
+        return "file://" + p
+    except Exception:
+        return ""
 
 
 def _hp_color(hp, max_hp):
@@ -61,7 +91,6 @@ def _svg_or_emoji(assets_dir, rel, emoji, size=64):
         if path:
             with open(path, encoding="utf-8") as f:
                 svg = f.read()
-            # force display size; keep the artwork itself untouched
             svg = svg.replace('viewBox="0 0 128 128"',
                               f'width="{size}" height="{size}" viewBox="0 0 128 128"', 1)
             return svg
@@ -127,7 +156,6 @@ def _svg_bar(x, y, w, hp, max_hp, h=8, label=True):
 
 
 def _pines(xs, base_y, scale, color, opacity=1.0):
-    """A cluster of pine trees (the sketch's background)."""
     parts = []
     for x in xs:
         w, h = 46 * scale, 90 * scale
@@ -191,28 +219,35 @@ class GameViewer:
         except Exception:
             pass
 
-    # -- internals -----------------------------------------------------
-    def _stage(self, me, world, loc_id, loc_type):
-        """Side-view game scene: background, road, character, monsters, loot, NPCs."""
-        ad = self.assets_dir
+    # -- stage ---------------------------------------------------------
+    def background_url(self, loc_id):
+        """file:// URL of the Blender-rendered backdrop, or '' when missing."""
+        try:
+            if not (self.assets_dir and loc_id):
+                return ""
+            path = os.path.join(self.assets_dir, "backgrounds", f"{loc_id}.png")
+            return _file_url(path) if os.path.exists(path) else ""
+        except Exception:
+            return ""
+
+    def _terrain_svg(self, loc_id, loc_type, baseline):
+        """Drawn backdrop (used when there is no Blender background PNG)."""
         sky = SKY.get(loc_type, "#181C28")
         ground = GROUND.get(loc_type, "#12141C")
         decor = DECOR.get(loc_type, SLATE)
+        parts = [f'<rect x="0" y="0" width="{STAGE_W}" height="{STAGE_H}" rx="10" fill="{sky}"/>']
 
-        parts = [f'<rect x="0" y="0" width="960" height="380" rx="10" fill="{sky}"/>']
-
-        # Backdrop per terrain (the sketch's trees / town / cave).
         if loc_type == "wild":
-            parts.append(_pines([30, 110, 830, 890], 300, 1.1, VERDIGRIS, 0.9))
-            parts.append(_pines([180, 760], 300, 0.7, VERDIGRIS, 0.5))
+            parts.append(_pines([30, 110, 830, 890], baseline - 60, 1.1, VERDIGRIS, 0.9))
+            parts.append(_pines([180, 760], baseline - 60, 0.7, VERDIGRIS, 0.5))
         elif loc_type == "town":
             parts.append(
                 f'<g opacity="0.85" stroke="{GOLD}" fill="{INK}" stroke-width="3">'
-                f'<polygon points="770,150 850,100 930,150"/>'
-                f'<rect x="785" y="150" width="130" height="90"/>'
-                f'<rect x="835" y="190" width="30" height="50" fill="{GOLD}"/>'
-                f'<polygon points="60,180 120,140 180,180"/>'
-                f'<rect x="72" y="180" width="96" height="60"/>'
+                f'<polygon points="770,{baseline - 150} 850,{baseline - 200} 930,{baseline - 150}"/>'
+                f'<rect x="785" y="{baseline - 150}" width="130" height="90"/>'
+                f'<rect x="835" y="{baseline - 110}" width="30" height="50" fill="{GOLD}"/>'
+                f'<polygon points="60,{baseline - 120} 120,{baseline - 160} 180,{baseline - 120}"/>'
+                f'<rect x="72" y="{baseline - 120}" width="96" height="60"/>'
                 f'</g>')
         elif loc_type == "dungeon":
             parts.append(
@@ -222,78 +257,102 @@ class GameViewer:
                 f'<polygon points="700,0 720,0 710,44"/><polygon points="880,0 898,0 889,40"/>'
                 f'</g>')
         else:
-            parts.append(_pines([40, 880], 300, 0.9, SLATE, 0.6))
+            parts.append(_pines([40, 880], baseline - 60, 0.9, SLATE, 0.6))
 
-        # Road: the sketch's diagonal path across the scene.
+        # road across the scene + ground strip down to the baseline
         parts.append(
-            f'<polygon points="40,380 470,0 610,0 180,380" fill="{HAIRLINE}" opacity="0.55"/>'
-            f'<line x1="40" y1="380" x2="470" y2="0" stroke="{SLATE}" opacity="0.6"/>'
-            f'<line x1="180" y1="380" x2="610" y2="0" stroke="{SLATE}" opacity="0.6"/>')
-        # Ground strip.
-        parts.append(f'<rect x="0" y="300" width="960" height="80" fill="{ground}" opacity="0.9"/>')
+            f'<polygon points="40,{STAGE_H} 470,0 610,0 180,{STAGE_H}" '
+            f'fill="{HAIRLINE}" opacity="0.5"/>')
+        parts.append(f'<rect x="0" y="{baseline}" width="{STAGE_W}" '
+                     f'height="{STAGE_H - baseline}" fill="{ground}"/>')
+        return "".join(parts)
 
-        # NPCs: standing figures along the back.
+    def _tokens_svg(self, me, world, loc_id, loc_type, baseline):
+        """Character, monsters, loot, NPCs and labels, in stage coordinates."""
+        ad = self.assets_dir
+        decor = DECOR.get(loc_type, SLATE)
+        parts = []
+
+        # NPCs stand further back, above the baseline.
         npcs = [n for n in (world.get("npcs", []) or []) if isinstance(n, dict)][:4]
         for i, n in enumerate(npcs):
-            x = 250 + i * 70
+            x = 250 + i * 74
+            y = baseline - 118
             parts.append(_nested_art(ad, n.get("asset") or _expected("npc", n.get("npc_id", "")),
-                                     x, 96, 52, VERDIGRIS, n.get("name", "?")))
-            parts.append(f'<text x="{x + 26}" y="164" text-anchor="middle" font-size="12" '
+                                     x, y, 48, VERDIGRIS, n.get("name", "?")))
+            parts.append(f'<text x="{x + 24}" y="{y - 6}" text-anchor="middle" font-size="12" '
                          f'fill="{PARCHMENT}">{_esc(n.get("name", "?"))}</text>')
 
-        # Character: the hero, front-left on the road (the sketch's circle).
+        # The character, front-left on the ground line.
         name = me.get("name", "?") if isinstance(me, dict) else "?"
         initial = (str(name).strip()[:1] or "?").upper()
-        cx = 150
-        parts.append(_svg_bar(cx - 45, 196, 90, me.get("hp", 0), me.get("max_hp", 0)))
-        parts.append(f'<circle cx="{cx}" cy="262" r="36" fill="{INK}" '
-                     f'stroke="{GOLD}" stroke-width="5"/>'
-                     f'<text x="{cx}" y="274" text-anchor="middle" font-size="32" '
-                     f'fill="{PARCHMENT}" font-weight="bold" '
-                     f'font-family="Georgia,serif">{_esc(initial)}</text>'
-                     f'<text x="{cx}" y="316" text-anchor="middle" font-size="14" '
+        cx, r = 148, 36
+        parts.append(f'<text x="{cx}" y="{baseline - 100}" text-anchor="middle" font-size="14" '
                      f'fill="{GOLD}" font-weight="bold">{_esc(name)} · Lv {_esc(me.get("level", "?"))}</text>')
+        parts.append(_svg_bar(cx - 45, baseline - 92, 90,
+                              me.get("hp", 0), me.get("max_hp", 0)))
+        parts.append(f'<circle cx="{cx}" cy="{baseline - r}" r="{r}" fill="{INK}" '
+                     f'stroke="{GOLD}" stroke-width="5"/>'
+                     f'<text x="{cx}" y="{baseline - r + 12}" text-anchor="middle" font-size="32" '
+                     f'fill="{PARCHMENT}" font-weight="bold" '
+                     f'font-family="Georgia,serif">{_esc(initial)}</text>')
 
-        # Monsters: mid-scene and right, each with HP bar + drop glint.
-        mons = [m for m in (world.get("monsters", []) or []) if isinstance(m, dict)][:4]
-        for i, m in enumerate(mons):
-            x = 430 + i * 135
-            y = 150 if i % 2 == 0 else 205
-            parts.append(_svg_bar(x - 8, y - 34, 96, m.get("hp", 0), m.get("max_hp", 0)))
+        # Monsters, feet on the ground line.
+        mons = [m for m in (world.get("monsters", []) or []) if isinstance(m, dict)]
+        shown = mons[:4]
+        for i, m in enumerate(shown):
+            size = 80
+            x = 430 + i * 132
+            y = baseline - size
+            parts.append(f'<text x="{x + size / 2}" y="{y - 34}" text-anchor="middle" '
+                         f'font-size="13" fill="{PARCHMENT}">{_esc(m.get("name", "?"))}</text>')
+            parts.append(_svg_bar(x + 7, y - 30, 66, m.get("hp", 0), m.get("max_hp", 0)))
             parts.append(_nested_art(ad, m.get("asset") or _expected("monster", m.get("name", "")),
-                                     x, y, 80, BLOOD, m.get("name", "?")))
-            parts.append(f'<text x="{x + 40}" y="{y + 98}" text-anchor="middle" font-size="13" '
-                         f'fill="{PARCHMENT}">{_esc(m.get("name", "?"))}</text>')
+                                     x, y, size, BLOOD, m.get("name", "?")))
             if (m.get("drops") or {}).get("name"):
-                parts.append(f'<circle cx="{x + 72}" cy="{y + 6}" r="7" fill="{GOLD}">'
+                parts.append(f'<circle cx="{x + size - 4}" cy="{y + 8}" r="7" fill="{GOLD}">'
                              f'<title>{_esc(m["drops"]["name"])}</title></circle>')
-        extra_mons = len([m for m in (world.get("monsters", []) or []) if isinstance(m, dict)]) - len(mons)
-        if extra_mons > 0:
-            parts.append(f'<text x="920" y="200" text-anchor="middle" font-size="14" '
-                         f'fill="{SLATE}">+{extra_mons} more</text>')
+        if len(mons) > len(shown):
+            parts.append(f'<text x="920" y="{baseline - 120}" text-anchor="middle" font-size="14" '
+                         f'fill="{SLATE}">+{len(mons) - len(shown)} more</text>')
         if not mons:
-            parts.append(f'<text x="620" y="200" text-anchor="middle" font-size="15" '
+            parts.append(f'<text x="620" y="{baseline - 70}" text-anchor="middle" font-size="15" '
                          f'fill="{SLATE}">No monsters — safe to rest.</text>')
 
-        # Loot: small glints on the ground (the sketch's little loot circle).
+        # Loot lying on the ground line.
         loot = [g for g in (world.get("items_on_ground", []) or []) if isinstance(g, dict)][:4]
         for i, g in enumerate(loot):
-            x = 330 + i * 80
+            x = 330 + i * 78
+            y = baseline - 40
             parts.append(_nested_art(ad, g.get("asset") or _expected("item", g.get("item_id", "")),
-                                     x, 288, 44, GOLD, g.get("name", "?")))
+                                     x, y, 40, GOLD, g.get("name", "?")))
             qty = f' x{g.get("qty", 1)}' if g.get("qty", 1) != 1 else ""
-            parts.append(f'<text x="{x + 22}" y="352" text-anchor="middle" font-size="12" '
+            parts.append(f'<text x="{x + 20}" y="{y - 6}" text-anchor="middle" font-size="12" '
                          f'fill="{GOLD}">{_esc(g.get("name", "?"))}{_esc(qty)}</text>')
 
-        # Caption: location name + terrain tag.
-        loc_name = world.get("location_id", loc_id)
+        # Caption
         parts.append(f'<text x="16" y="34" font-size="24" fill="{PARCHMENT}" '
-                     f'font-family="Georgia,serif">{_esc(loc_name)}</text>')
-        parts.append(f'<text x="944" y="34" font-size="13" fill="{decor}" text-anchor="end">'
-                     f'{_esc(loc_type or "?")}</text>')
+                     f'font-family="Georgia,serif">{_esc(loc_id)}</text>')
+        parts.append(f'<text x="{STAGE_W - 16}" y="34" font-size="13" fill="{decor}" '
+                     f'text-anchor="end">{_esc(loc_type or "?")}</text>')
+        return "".join(parts)
 
-        return (f'<svg viewBox="0 0 960 380" style="width:100%;height:auto;display:block;">'
-                f'{"".join(parts)}</svg>')
+    def _stage(self, me, world, loc_id, loc_type):
+        baseline = BASELINE.get(loc_id, DEFAULT_BASELINE)
+        tokens = self._tokens_svg(me, world, loc_id, loc_type, baseline)
+        bg = self.background_url(loc_id)
+        if bg:
+            # Blender backdrop image with the tokens layered on top.
+            return (
+                f'<div style="position:relative;border-radius:10px;overflow:hidden;">'
+                f'<img src="{_esc(bg)}" alt="{_esc(loc_id)}" '
+                f'style="width:100%;display:block;"/>'
+                f'<svg viewBox="0 0 {STAGE_W} {STAGE_H}" '
+                f'style="position:absolute;inset:0;width:100%;height:100%;">{tokens}</svg>'
+                f'</div>')
+        return (f'<svg viewBox="0 0 {STAGE_W} {STAGE_H}" '
+                f'style="width:100%;height:auto;display:block;">'
+                f'{self._terrain_svg(loc_id, loc_type, baseline)}{tokens}</svg>')
 
     def _render(self, turn, me_raw, here_raw, action_desc, result_narrative, log, status):
         me = me_raw.get("data", me_raw) if isinstance(me_raw, dict) else {}
@@ -309,14 +368,9 @@ class GameViewer:
         gold = me.get("gold", "?")
         kills = me.get("kills", "?")
         loc_id = world.get("location_id") or me.get("location", "?")
-        loc_type = None
-        for cand in (world.get("type"),):
-            if cand in ("town", "wild", "dungeon"):
-                loc_type = cand
-        if loc_type is None:
-            loc_type = {"riverside_village": "town", "capital_city": "town",
-                        "oakhollow_forest": "wild", "sunken_marsh": "wild",
-                        "deep_cave": "dungeon", "ember_ridge": "dungeon"}.get(loc_id)
+        loc_type = world.get("type")
+        if loc_type not in ("town", "wild", "dungeon"):
+            loc_type = LOCATION_TYPE.get(loc_id)
 
         stage = self._stage(me, world, loc_id, loc_type)
 

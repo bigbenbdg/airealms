@@ -49,5 +49,13 @@
     "itm_healing_potion": "assets/items/itm_healing_potion.svg",
     "itm_greater_potion": "assets/items/itm_greater_potion.svg",
     "itm_elixir": "assets/items/itm_elixir.svg"
+  },
+  "backgrounds": {
+    "riverside_village": "assets/backgrounds/riverside_village.png",
+    "oakhollow_forest": "assets/backgrounds/oakhollow_forest.png",
+    "capital_city": "assets/backgrounds/capital_city.png",
+    "deep_cave": "assets/backgrounds/deep_cave.png",
+    "sunken_marsh": "assets/backgrounds/sunken_marsh.png",
+    "ember_ridge": "assets/backgrounds/ember_ridge.png"
   }
 }

@@ -6,7 +6,16 @@
     "monsters": 6,
     "npcs": 8,
     "items": 22,
+    "backgrounds": 6,
     "total": 42
+  },
+  "backgrounds": {
+    "riverside_village": "assets/backgrounds/riverside_village.png",
+    "oakhollow_forest": "assets/backgrounds/oakhollow_forest.png",
+    "capital_city": "assets/backgrounds/capital_city.png",
+    "deep_cave": "assets/backgrounds/deep_cave.png",
+    "sunken_marsh": "assets/backgrounds/sunken_marsh.png",
+    "ember_ridge": "assets/backgrounds/ember_ridge.png"
   },
   "locations": [
     {

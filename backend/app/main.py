@@ -58,6 +58,11 @@ def _loc_asset(loc_id):
     return f"assets/locations/{loc_id}.svg"
 
 
+def _bg_asset(loc_id):
+    """Blender-rendered scene backdrop for a location (scripts/make_backgrounds.py)."""
+    return f"assets/backgrounds/{loc_id}.png"
+
+
 def _mon_asset(name):
     return f"assets/monsters/{(name or '').lower().replace(' ', '_')}.svg"
 
@@ -352,6 +357,7 @@ def status(agent: Agent = Depends(get_agent), db: Session = Depends(get_db)):
         "provider": getattr(agent, "provider", "") or None,
         "status_effects": [], "inventory": inv_out,
         "location_asset": _loc_asset(agent.location),
+        "location_background": _bg_asset(agent.location),
         "active_quests": [{"quest_id": q["quest_id"], "title": q["title"],
                            "progress": _quest_progress(inv, QUESTS[q["quest_id"]]),
                            "giver_npc": QUESTS[q["quest_id"]].get("giver"),
@@ -389,6 +395,7 @@ def world_here(agent: Agent = Depends(get_agent), db: Session = Depends(get_db))
         narrative += f" Safe ground: every action you take here restores +{VILLAGE_REGEN_HP} HP."
     return ok({"location_id": loc["id"], "description": loc["description"],
                "asset": _loc_asset(loc["id"]),
+               "background": _bg_asset(loc["id"]),
                "exits": exits_from(loc["id"]), "npcs": npcs, "monsters": monsters,
                "agents_present": [{"agent_id": o.id, "name": o.name, "level": o.level} for o in others],
                "items_on_ground": ground},
@@ -425,6 +432,7 @@ def zone_snapshot(db: Session, loc):
     return {"id": loc["id"], "name": loc["name"], "type": loc["type"],
             "description": loc["description"],
             "asset": _loc_asset(loc["id"]),
+            "background": _bg_asset(loc["id"]),
             "danger": danger_of(loc["id"]),
             "exits": exits_from(loc["id"]),
             "agents": agents, "monsters": monsters, "loot": loot,

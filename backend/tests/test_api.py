@@ -1187,3 +1187,33 @@ def test_assets_manifest_and_world_asset_fields():
     # static file serving works when assets/ exists
     r = c.get("/assets/manifest.json")
     assert r.status_code == 200
+
+
+def test_background_assets_match_locations():
+    import json as _json
+    import os as _os
+    root = _os.path.join(_os.path.dirname(__file__), "..", "..")
+    manifest = _json.load(open(_os.path.join(root, "assets", "manifest.json")))
+    c = fresh_client()
+    mf = c.get("/api/v1/meta/assets").json()["data"]
+    assert len(mf["backgrounds"]) == 6
+    assert set(mf["backgrounds"]) == set(mf["locations"])
+    # each declared background resolves to a real file, and to the API's field
+    for loc_id, rel in mf["backgrounds"].items():
+        assert rel == f"assets/backgrounds/{loc_id}.png"
+        assert _os.path.exists(_os.path.join(root, rel)), rel
+    assert manifest["backgrounds"] == mf["backgrounds"]
+    # the API advertises the background alongside the icon asset
+    reg = register(c, "BgBot")
+    h = {"Authorization": f"Bearer {reg['api_key']}"}
+    here = c.get("/api/v1/world/here", headers=h).json()["data"]
+    assert here["background"] == "assets/backgrounds/riverside_village.png"
+    assert here["asset"] == "assets/locations/riverside_village.svg"
+    st = c.get("/api/v1/status", headers=h).json()["data"]
+    assert st["location_background"].endswith("riverside_village.png")
+    zones = {z["id"]: z for z in c.get("/api/v1/world/state").json()["data"]["zones"]}
+    assert all(z["background"].startswith("assets/backgrounds/") for z in zones.values())
+    # the served PNG is fetchable through the static mount
+    png = c.get("/assets/backgrounds/riverside_village.png")
+    assert png.status_code == 200
+    assert png.content[:8] == b"\x89PNG\r\n\x1a\n"
