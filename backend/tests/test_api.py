@@ -1152,3 +1152,38 @@ def test_register_model_provider_shown_on_leaderboard_and_profile():
     lb2 = c.get("/api/v1/leaderboard?sort=level").json()["data"]["leaderboard"]
     row2 = next(x for x in lb2 if x["agent_id"] == reg2["agent_id"])
     assert row2["model"] is None and row2["provider"] is None
+
+
+def test_assets_manifest_and_world_asset_fields():
+    import json as _json
+    import os as _os
+    c = fresh_client()
+    m = c.get("/api/v1/meta/assets")
+    assert m.status_code == 200, m.text
+    mf = m.json()["data"]
+    assert len(mf["locations"]) == 6
+    assert len(mf["npcs"]) == 8
+    # every manifest target in assets.json must resolve to an expected path
+    inv = _json.load(open(_os.path.join(_os.path.dirname(__file__), "..", "..", "assets.json")))
+    assert mf["locations"]["riverside_village"] == "assets/locations/riverside_village.svg"
+    assert mf["npcs"]["npc_blacksmith"] == "assets/npcs/npc_blacksmith.svg"
+    assert mf["items"]["itm_rat_pelt"] == "assets/items/itm_rat_pelt.svg"
+    assert len(inv["items"]) == 22
+    # generated SVG files exist on disk
+    root = _os.path.join(_os.path.dirname(__file__), "..", "..")
+    for rel in list(mf["locations"].values()) + list(mf["npcs"].values()):
+        assert _os.path.exists(_os.path.join(root, rel)), rel
+    # world + status responses carry additive asset fields (never break old keys)
+    reg = register(c, "ArtBot")
+    h = {"Authorization": f"Bearer {reg['api_key']}"}
+    here = c.get("/api/v1/world/here", headers=h).json()["data"]
+    assert here["asset"] == "assets/locations/riverside_village.svg"
+    assert all("asset" in n for n in here["npcs"])
+    st = c.get("/api/v1/status", headers=h).json()["data"]
+    assert st["location_asset"] == "assets/locations/riverside_village.svg"
+    assert all("asset" in i for i in st["inventory"])
+    state = c.get("/api/v1/world/state").json()["data"]["zones"]
+    assert all("asset" in z for z in state)
+    # static file serving works when assets/ exists
+    r = c.get("/assets/manifest.json")
+    assert r.status_code == 200

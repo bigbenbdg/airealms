@@ -11,6 +11,8 @@ Usage:
   python play.py --base http://localhost:8000/api/v1 --name "Sir Reginald Bot"
   python play.py --base http://localhost:8000/api/v1 --api-key sk_live_... --turns 5
   python play.py --turns 10 --llm-key sk-...            # LLM brain decides actions
+  python play.py --no-llm --turns 5 --view               # + live game HUD in your browser
+  python play.py --no-llm --turns 5 --no-art              # hide the terminal Scene art block
   Config lives in the repo-root .env (AIREALMS_GAME_BASE/LLM_BASE/MODEL/KEY);
   flags and real environment variables override .env.
 
@@ -28,6 +30,8 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from engines.common import SKILL_URL_TMPL, CLIENT_REQUIRED, _load_dotenv, _print_debrief, req
 from engines.heuristic import QUEST_META, decide
 from engines.llm import DEFAULT_GOAL, collect_ids, llm_decide
+from engines import assets as game_assets
+from engines.viewer import GameViewer
 
 _load_dotenv()
 
@@ -54,6 +58,20 @@ def main():
     ap.add_argument("--verbose", action="store_true",
                     default=os.getenv("AIREALMS_VERBOSE", "").lower() in ("1", "true", "yes", "on"),
                     help="print full server envelopes (status/here/action result) each turn")
+    ap.add_argument("--assets-dir", default=os.getenv("AIREALMS_ASSETS_DIR", ""),
+                    help="local assets/ checkout for game art (default: auto-detect repo assets/)")
+    _art_default = os.getenv("AIREALMS_ART", "").lower() not in ("0", "false", "no", "off")
+    ap.add_argument("--art", dest="art", action=argparse.BooleanOptionalAction,
+                    default=_art_default,
+                    help="show or hide the terminal Scene art block (--art / --no-art, default: show)")
+    ap.add_argument("--open-images", action="store_true",
+                    help="also open the current location SVG in your viewer each turn")
+    ap.add_argument("--view", action="store_true",
+                    help="open a live game HUD (viewer.html, auto-refreshes) in your browser")
+    ap.add_argument("--view-file", default=os.getenv("AIREALMS_VIEW_FILE", ""),
+                    help="where to write the game HUD html (default: temp airealms-viewer.html)")
+    ap.add_argument("--view-refresh", type=int, default=int(os.getenv("AIREALMS_VIEW_REFRESH", "2")),
+                    help="HUD auto-refresh seconds (0 disables)")
     args = ap.parse_args()
     if args.model and not os.getenv("AIREALMS_LLM_MODEL"):
         args.llm_model = args.model
@@ -87,6 +105,38 @@ def main():
     else:
         print("Brain: heuristic fallback (set AIREALMS_LLM_BASE + AIREALMS_LLM_KEY, "
               "or pass --llm-base/--llm-key, to enable the LLM brain)")
+
+    # Terminal art: --art / --no-art (or AIREALMS_ART=0) controls ONLY the
+    # CLI Scene block. The browser HUD (--view) always renders art when it
+    # can, so assets are resolved independently of the terminal toggle.
+    show_art = bool(args.art)
+    assets_dir = game_assets.find_assets_dir(args.assets_dir)
+    if not show_art:
+        print("Art: terminal art off (pass --art to show the Scene block; --view HUD is unaffected).")
+    elif assets_dir:
+        print(f"Art: {assets_dir} (pass --no-art for text-only, --open-images to pop the viewer)")
+    else:
+        print("Art: assets/ not found — emoji fallback (run scripts/make_assets.py to generate art).")
+
+    # In-game HUD: self-contained viewer.html, rewritten every turn.
+    viewer = None
+    view_log = []
+    if args.view:
+        try:
+            viewer = GameViewer(assets_dir=assets_dir, refresh=args.view_refresh,
+                                path=args.view_file)
+            viewer.update(turn=0, status="starting")
+            viewer.open()
+            print(f"View: {viewer.path} (auto-refreshes every {viewer.refresh}s)")
+        except Exception as e:
+            print(f"View unavailable ({e}) — continuing text-only.")
+            viewer = None
+
+    def vlog(entry):
+        try:
+            view_log.append(str(entry))
+        except Exception:
+            pass
 
     key = args.api_key
     if not key:
@@ -148,6 +198,7 @@ def main():
     overview, overview_zones = fetch_overview()
 
     last_result = None   # {"narrative":..., "data":...} of previous action
+    last_action_desc = ""  # shown in the HUD ("attack mon_wolf_1")
     offered = []         # quest offers seen in talk_to_npc results (with giver)
     accepted = set()     # quest_ids we accepted (heuristic memory)
     recent = []          # recent {action, params} (loop detection + LLM context)
@@ -191,14 +242,40 @@ def main():
         if me["cooldown_seconds_remaining"] > 0:
             wait = me["cooldown_seconds_remaining"]
             print(f"Cooldown {wait}s — waiting.")
+            vlog(f"turn {t+1}: cooling down ({wait}s)")
+            if viewer:
+                viewer.update(t + 1, st, {}, last_action_desc,
+                              (last_result or {}).get("narrative", ""), view_log,
+                              status="cooling down")
             time.sleep(wait + 1)
             continue
         here = req("GET", f"{args.base}/world/here", api_key=key)
         print("Here:", here["narrative"])
         show(f"SERVER GET /world/here (turn {t+1})", here)
+        if show_art:
+            try:
+                game_assets.print_art(game_assets.scene_block(st, here, assets_dir))
+                if args.open_images:
+                    import webbrowser
+                    loc = (here.get("data", {}) or {}).get("asset", "")
+                    if assets_dir and loc:
+                        cand = os.path.join(assets_dir, os.path.basename(
+                            os.path.dirname(loc)) or "", os.path.basename(loc))
+                        if os.path.exists(cand):
+                            webbrowser.open(f"file:///{cand.replace(os.sep, '/')}")
+            except Exception:
+                pass
+        vlog(f"turn {t+1}: {here.get('narrative', '')}")
+        if viewer:
+            viewer.update(t + 1, st, here, last_action_desc,
+                          (last_result or {}).get("narrative", ""), view_log)
         if not me["alive"]:
             _print_debrief(me)
             print("Run over: character is dead. Debrief above — apply it to the next build.");
+            if viewer:
+                viewer.update(t + 1, st, here, last_action_desc,
+                              (last_result or {}).get("narrative", ""), view_log,
+                              status="dead")
             break
         if use_llm:
             # LLM-or-bust: any failure (no response, bad JSON, missing or
@@ -260,6 +337,12 @@ def main():
                 break
         recent.append({"action": choice[0], "params": choice[1]})  # loop guard + LLM context
         print("Acting:", choice)
+        last_action_desc = f"{choice[0]} {json.dumps(choice[1])}"
+        vlog(f"turn {t+1}: acting {last_action_desc}")
+        if viewer:
+            viewer.update(t + 1, st, here, last_action_desc,
+                          (last_result or {}).get("narrative", ""), view_log,
+                          status="acting")
         try:
             out = req("POST", f"{args.base}/actions", {"action": choice[0], "params": choice[1]}, api_key=key)
         except Exception as e:
@@ -268,12 +351,26 @@ def main():
             print(f"Action rejected ({e}). Sitting this turn out.")
             last_result = {"narrative": f"My {choice[0]} was rejected: {e}",
                            "data": {"action": choice[0], "result": "rejected"}}
+            vlog(f"turn {t+1}: rejected ({e})")
+            if viewer:
+                viewer.update(t + 1, st, here, last_action_desc,
+                              last_result["narrative"], view_log, status="rejected")
             push_history(t + 1, me, choice[0], choice[1], last_result["narrative"],
                          result="rejected")
             time.sleep(3)
             continue
         print("Result:", out["narrative"])
         show(f"SERVER POST /actions {choice[0]} (turn {t+1})", out)
+        vlog(f"turn {t+1} result: {out.get('narrative', '')}")
+        if viewer:
+            viewer.update(t + 1, st, here, last_action_desc,
+                          out.get("narrative", ""), view_log)
+        if show_art:
+            try:
+                for line in game_assets.loot_lines(out, assets_dir):
+                    game_assets.print_art(line)
+            except Exception:
+                pass
         last_result = {"narrative": out.get("narrative", ""), "data": out.get("data", {})}
         # The server attaches a player snapshot to every turn — surface
         # level-ups and progress here (the full snapshot already rides

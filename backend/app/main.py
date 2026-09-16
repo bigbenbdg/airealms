@@ -41,6 +41,46 @@ app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], all
 SKILL_PATH = Path(__file__).resolve().parents[2] / "03-SKILLS.md"
 _skill_cache = None
 
+# Game art: procedural SVGs in repo-root assets/ (scripts/make_assets.py).
+# Served at /assets + described by GET /meta/assets. Missing files are fine —
+# helpers return the expected relative path and clients fall back to emoji.
+ASSETS_DIR = Path(__file__).resolve().parents[2] / "assets"
+try:
+    from fastapi.staticfiles import StaticFiles as _StaticFiles
+
+    if ASSETS_DIR.is_dir():
+        app.mount("/assets", _StaticFiles(directory=str(ASSETS_DIR)), name="assets")
+except Exception:
+    pass
+
+
+def _loc_asset(loc_id):
+    return f"assets/locations/{loc_id}.svg"
+
+
+def _mon_asset(name):
+    return f"assets/monsters/{(name or '').lower().replace(' ', '_')}.svg"
+
+
+def _npc_asset(npc_id):
+    return f"assets/npcs/{npc_id}.svg"
+
+
+def _item_asset(item_id):
+    return f"assets/items/{item_id}.svg"
+
+
+def assets_manifest():
+    mf = ASSETS_DIR / "manifest.json"
+    if mf.exists():
+        try:
+            return json.loads(mf.read_text(encoding="utf-8"))
+        except Exception:
+            pass
+    return {"version": "1.0.0", "locations": {l["id"]: _loc_asset(l["id"]) for l in LOCATIONS},
+            "monsters": {}, "npcs": {n["npc_id"]: _npc_asset(n["npc_id"]) for n in NPCS},
+            "items": {}}
+
 
 def skill_text():
     global _skill_cache
@@ -239,6 +279,16 @@ def meta_goals():
               "The objectives every agent plays toward. Point your LLM brain at these.")
 
 
+@app.get("/api/v1/meta/assets")
+def meta_assets():
+    """Game-art manifest: every location/monster/NPC/item -> repo-relative SVG path.
+
+    Clients resolve locally (assets/...) or via the server's /assets mount.
+    Missing files are fine — fall back to emoji/text, never fail the turn.
+    """
+    return ok(assets_manifest(), "Game art manifest: SVG per location, monster, NPC, and item.")
+
+
 @app.get("/api/v1/actions/schema")
 def actions_schema():
     return ok({"actions": ACTION_DEFS}, "Machine-readable action catalog.")
@@ -291,6 +341,8 @@ def status(agent: Agent = Depends(get_agent), db: Session = Depends(get_db)):
     if report:
         narrative = (f"{agent.name} is dead — slain by {report['killed_by']}. "
                      f"Top lesson: {report['lessons'][1]}")
+    inv_out = [{**i, "asset": _item_asset(i.get("item_id", ""))} if isinstance(i, dict) and "asset" not in i else i
+               for i in inv]
     return ok({
         "agent_id": agent.id, "name": agent.name, "level": agent.level, "xp": agent.xp,
         "xp_to_next_level": xp_for_level(agent.level), "hp": agent.hp, "max_hp": agent.max_hp,
@@ -298,7 +350,8 @@ def status(agent: Agent = Depends(get_agent), db: Session = Depends(get_db)):
         "stats": load_json(agent.stats, {}), "gold": agent.gold, "location": agent.location,
         "model": getattr(agent, "model", "") or None,
         "provider": getattr(agent, "provider", "") or None,
-        "status_effects": [], "inventory": inv,
+        "status_effects": [], "inventory": inv_out,
+        "location_asset": _loc_asset(agent.location),
         "active_quests": [{"quest_id": q["quest_id"], "title": q["title"],
                            "progress": _quest_progress(inv, QUESTS[q["quest_id"]]),
                            "giver_npc": QUESTS[q["quest_id"]].get("giver"),
@@ -320,19 +373,22 @@ def world_here(agent: Agent = Depends(get_agent), db: Session = Depends(get_db))
     loc = loc_by_id(agent.location)
     if not loc:
         err("TARGET_NOT_FOUND", f"Unknown location {agent.location}.")
-    npcs = [n for n in NPCS if n["location"] == agent.location]
+    npcs = [{**n, "asset": _npc_asset(n["npc_id"])} for n in NPCS if n["location"] == agent.location]
     monsters = [{"monster_id": m.id, "name": m.name, "hp": m.hp, "max_hp": m.max_hp,
+                 "asset": _mon_asset(m.name),
                  "drops": ({"name": MONSTER_DROPS[m.name]["name"],
                             "chance": MONSTER_DROPS[m.name]["chance"]}
                            if m.name in MONSTER_DROPS else None)}
                 for m in db.query(Monster).filter(Monster.location == agent.location, Monster.alive == True).all()]  # noqa: E712
     others = db.query(Agent).filter(Agent.location == agent.location, Agent.id != agent.id).all()
-    ground = [{"ground_id": g.id, "item_id": g.item_id, "name": g.name, "qty": g.qty}
+    ground = [{"ground_id": g.id, "item_id": g.item_id, "name": g.name, "qty": g.qty,
+               "asset": _item_asset(g.item_id)}
               for g in db.query(GroundItem).filter(GroundItem.location == agent.location).all()]
     narrative = f"You are in {loc['name']}. {loc['description']}"
     if loc.get("type") == "town":
         narrative += f" Safe ground: every action you take here restores +{VILLAGE_REGEN_HP} HP."
     return ok({"location_id": loc["id"], "description": loc["description"],
+               "asset": _loc_asset(loc["id"]),
                "exits": exits_from(loc["id"]), "npcs": npcs, "monsters": monsters,
                "agents_present": [{"agent_id": o.id, "name": o.name, "level": o.level} for o in others],
                "items_on_ground": ground},
@@ -360,18 +416,21 @@ def zone_snapshot(db: Session, loc):
     for m in db.query(Monster).filter(Monster.location == loc["id"], Monster.alive == True).all():  # noqa: E712
         drop = MONSTER_DROPS.get(m.name)
         monsters.append({"monster_id": m.id, "name": m.name, "hp": m.hp,
-                         "max_hp": m.max_hp,
+                         "max_hp": m.max_hp, "asset": _mon_asset(m.name),
                          "drops": ({"name": drop["name"], "chance": drop["chance"]}
                                    if drop else None)})
-    loot = [{"ground_id": g.id, "item_id": g.item_id, "name": g.name, "qty": g.qty}
+    loot = [{"ground_id": g.id, "item_id": g.item_id, "name": g.name, "qty": g.qty,
+             "asset": _item_asset(g.item_id)}
             for g in db.query(GroundItem).filter(GroundItem.location == loc["id"]).all()]
     return {"id": loc["id"], "name": loc["name"], "type": loc["type"],
             "description": loc["description"],
+            "asset": _loc_asset(loc["id"]),
             "danger": danger_of(loc["id"]),
             "exits": exits_from(loc["id"]),
             "agents": agents, "monsters": monsters, "loot": loot,
             "npcs": [{"npc_id": n["npc_id"], "name": n["name"],
-                      "can_trade": n["can_trade"], "has_quest": n["has_quest"]}
+                      "can_trade": n["can_trade"], "has_quest": n["has_quest"],
+                      "asset": _npc_asset(n["npc_id"])}
                      for n in NPCS if n["location"] == loc["id"]],
             "quests": quests_at(loc["id"])}
 

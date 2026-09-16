@@ -1,0 +1,53 @@
+{
+  "version": "1.0.0",
+  "locations": {
+    "riverside_village": "assets/locations/riverside_village.svg",
+    "oakhollow_forest": "assets/locations/oakhollow_forest.svg",
+    "capital_city": "assets/locations/capital_city.svg",
+    "deep_cave": "assets/locations/deep_cave.svg",
+    "sunken_marsh": "assets/locations/sunken_marsh.svg",
+    "ember_ridge": "assets/locations/ember_ridge.svg"
+  },
+  "monsters": {
+    "Giant Rat": "assets/monsters/giant_rat.svg",
+    "Forest Wolf": "assets/monsters/forest_wolf.svg",
+    "Road Bandit": "assets/monsters/road_bandit.svg",
+    "Marsh Wraith": "assets/monsters/marsh_wraith.svg",
+    "Cave Troll": "assets/monsters/cave_troll.svg",
+    "Ember Drake": "assets/monsters/ember_drake.svg"
+  },
+  "npcs": {
+    "npc_blacksmith": "assets/npcs/npc_blacksmith.svg",
+    "npc_innkeeper": "assets/npcs/npc_innkeeper.svg",
+    "npc_armorer_sella": "assets/npcs/npc_armorer_sella.svg",
+    "npc_scout": "assets/npcs/npc_scout.svg",
+    "npc_captain": "assets/npcs/npc_captain.svg",
+    "npc_merchant": "assets/npcs/npc_merchant.svg",
+    "npc_hermit": "assets/npcs/npc_hermit.svg",
+    "npc_warden": "assets/npcs/npc_warden.svg"
+  },
+  "items": {
+    "itm_rat_pelt": "assets/items/itm_rat_pelt.svg",
+    "itm_wolf_pelt": "assets/items/itm_wolf_pelt.svg",
+    "itm_bandit_dagger": "assets/items/itm_bandit_dagger.svg",
+    "itm_troll_hide": "assets/items/itm_troll_hide.svg",
+    "itm_wraith_essence": "assets/items/itm_wraith_essence.svg",
+    "itm_drake_scale": "assets/items/itm_drake_scale.svg",
+    "itm_rusty_sword": "assets/items/itm_rusty_sword.svg",
+    "itm_short_sword": "assets/items/itm_short_sword.svg",
+    "itm_iron_sword": "assets/items/itm_iron_sword.svg",
+    "itm_cloth_garb": "assets/items/itm_cloth_garb.svg",
+    "itm_leather_armor": "assets/items/itm_leather_armor.svg",
+    "itm_knight_blade": "assets/items/itm_knight_blade.svg",
+    "itm_rune_sword": "assets/items/itm_rune_sword.svg",
+    "itm_chainmail": "assets/items/itm_chainmail.svg",
+    "itm_plate_armor": "assets/items/itm_plate_armor.svg",
+    "itm_dragonslayer": "assets/items/itm_dragonslayer.svg",
+    "itm_ember_greatsword": "assets/items/itm_ember_greatsword.svg",
+    "itm_dragonscale_mail": "assets/items/itm_dragonscale_mail.svg",
+    "itm_ember_plate": "assets/items/itm_ember_plate.svg",
+    "itm_healing_potion": "assets/items/itm_healing_potion.svg",
+    "itm_greater_potion": "assets/items/itm_greater_potion.svg",
+    "itm_elixir": "assets/items/itm_elixir.svg"
+  }
+}
