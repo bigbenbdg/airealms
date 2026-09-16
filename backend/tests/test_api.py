@@ -1104,6 +1104,8 @@ def test_gear_attack_replaces_and_stacks_with_base():
 
 def test_legacy_bonus_defend_items_still_count():
     import json as _json
+    from unittest import mock as _mock
+    from app import engine as _engine
     from app.engine import player_attack_damage, player_defense
     from app.models import Agent as _A
     c = fresh_client()
@@ -1120,7 +1122,10 @@ def test_legacy_bonus_defend_items_still_count():
     a.inventory = _json.dumps(inv)
     db.commit()
     assert player_defense(a) == 1 + 4  # base 1 + legacy defend 4
-    assert player_attack_damage(a) >= 3 + 1 + 0 + 3  # 3 + str//2 + base + legacy
+    # player_attack_damage adds a d6 roll (randint(1, 6) - 2); pin the roll
+    # so this stays deterministic. Base is 3 + str//2 + base + legacy = 7.
+    with _mock.patch.object(_engine.random, "randint", return_value=4):
+        assert player_attack_damage(a) == 7 + 4 - 2
     db.close()
 
 
