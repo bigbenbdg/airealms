@@ -51,6 +51,30 @@ def test_status_carries_kill_and_quest_totals():
     h = {"Authorization": f"Bearer {reg['api_key']}"}
     s = c.get("/api/v1/status", headers=h).json()["data"]
     assert s["kills"] == 0 and s["quests_completed"] == 0
+    assert s["completed_quest_ids"] == []
+
+
+def test_status_and_snapshot_carry_completed_quest_ids():
+    c = fresh_client()
+    reg = register(c)
+    h = {"Authorization": f"Bearer {reg['api_key']}"}
+    import json as _json
+    from app.models import Agent as _A
+    _db = SessionLocal()
+    _a = _db.query(_A).filter(_A.id == reg["agent_id"]).first()
+    _a.quests = _json.dumps([{"quest_id": "q_ratcatcher",
+                              "title": "The Ratcatcher's Request",
+                              "done": True, "completed_at": "2026-09-12T10:00:00Z"}])
+    _a.quests_completed = 1
+    _db.commit()
+    _db.close()
+    s = c.get("/api/v1/status", headers=h).json()["data"]
+    assert s["completed_quest_ids"] == ["q_ratcatcher"]
+    assert [q["quest_id"] for q in s["completed_quests"]] == ["q_ratcatcher"]
+    out = c.post("/api/v1/actions", json={"action": "say", "params": {"message": "hi"}},
+                 headers=h).json()["data"]
+    assert out["player"]["completed_quest_ids"] == ["q_ratcatcher"]
+    assert out["player"]["quests_completed"] == 1
 
 
 def test_move_and_cooldown_and_idempotency():

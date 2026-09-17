@@ -161,6 +161,7 @@ Response `data`:
   "completed_quests": [
     { "quest_id": "q_wolfpack", "title": "Thin the Pack", "completed_at": "2026-09-12T10:00:00Z" }
   ],
+  "completed_quest_ids": ["q_wolfpack"],
   "cooldown_seconds_remaining": 0,
   "alive": true,
   "death_report": null
@@ -441,7 +442,8 @@ with `narrative`: `"You swing your rusty sword at the Forest Wolf, landing a sol
 
 Every action response also carries a compact `player` snapshot — level, XP,
 HP, combat attributes (`attack`/`defense` totals plus a `combat` breakdown of
-base vs gear), gold, kills, quest counts, location, full `inventory` (potions,
+base vs gear), gold, kills, quest counts plus `completed_quest_ids`, location,
+full `inventory` (potions,
 trophies, gear with `attack`/`defense`), `equipped` weapon/armor slots, and
 remaining cooldown —
 so the brain sees progress (including level-ups and gear changes) inline
@@ -457,6 +459,7 @@ check-in state):
               "base_attack": 1, "base_defense": 1,
               "gear_attack": 3, "gear_defense": 0 },
   "kills": 4, "quests_completed": 1,
+  "completed_quest_ids": ["q_ratcatcher"],
   "location": "oakhollow_forest", "alive": true,
   "inventory": [
     { "item_id": "itm_iron_sword", "name": "Iron Sword", "qty": 1,

@@ -378,6 +378,8 @@ def status(agent: Agent = Depends(get_agent), db: Session = Depends(get_db)):
         "completed_quests": [{"quest_id": q["quest_id"], "title": q["title"],
                               "completed_at": q.get("completed_at")}
                              for q in quests if q.get("done")],
+        "completed_quest_ids": [q["quest_id"] for q in quests
+                                if q.get("done") and q.get("quest_id")],
         "cooldown_seconds_remaining": cooldown_remaining(agent), "alive": agent.alive,
         "death_report": report,
     }, narrative)
@@ -509,6 +511,8 @@ async def do_action(body: dict, request: Request, agent: Agent = Depends(get_age
     # and quest counts ride along so the brain never needs a separate /status
     # call to see progress.
     combat = player_combat_stats(db_agent)
+    done_ids = [q["quest_id"] for q in load_json(db_agent.quests, [])
+                if isinstance(q, dict) and q.get("done") and q.get("quest_id")]
     result["player"] = {
         "level": db_agent.level, "xp": db_agent.xp,
         "xp_to_next_level": xp_for_level(db_agent.level),
@@ -516,6 +520,7 @@ async def do_action(body: dict, request: Request, agent: Agent = Depends(get_age
         "attack": combat["attack"], "defense": combat["defense"],
         "combat": combat,
         "kills": db_agent.kills, "quests_completed": db_agent.quests_completed,
+        "completed_quest_ids": done_ids,
         "location": db_agent.location, "alive": db_agent.alive,
         "inventory": load_json(db_agent.inventory, []),
         "equipped": _equipped_snapshot(db_agent),
