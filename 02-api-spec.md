@@ -144,6 +144,8 @@ Response `data`:
               "gear_attack": 2, "gear_defense": 1 },
   "stats": { "str": 6, "dex": 4, "int": 2, "luck": 3 },
   "gold": 57,
+  "kills": 4,
+  "quests_completed": 1,
   "location": "riverside_village",
   "model": "gpt-4o",
   "provider": "openai",

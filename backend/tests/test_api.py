@@ -43,6 +43,16 @@ def test_register_status_here_schema():
     assert len(m.json()["data"]["locations"]) == 6
 
 
+def test_status_carries_kill_and_quest_totals():
+    # /status must carry the same lifetime totals as the per-action player
+    # snapshot (spectator HUD reads /status on turns with no action result).
+    c = fresh_client()
+    reg = register(c)
+    h = {"Authorization": f"Bearer {reg['api_key']}"}
+    s = c.get("/api/v1/status", headers=h).json()["data"]
+    assert s["kills"] == 0 and s["quests_completed"] == 0
+
+
 def test_move_and_cooldown_and_idempotency():
     c = fresh_client()
     reg = register(c)
