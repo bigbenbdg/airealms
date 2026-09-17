@@ -124,6 +124,19 @@ def _file_url(path):
         return ""
 
 
+def _halo(width=3):
+    """Dark outline behind stage <text> so labels read over bright backdrops.
+
+    Uses paint-order:stroke so the stroke never eats the glyph fill.
+    Never raises."""
+    try:
+        w = float(width)
+    except Exception:
+        w = 3
+    return (f'stroke="{INK}" stroke-width="{w}" paint-order="stroke" '
+            f'stroke-linejoin="round"')
+
+
 def _hp_color(hp, max_hp):
     try:
         pct = float(hp) / float(max_hp or 1)
@@ -223,7 +236,8 @@ def _nested_art(assets_dir, rel, x, y, size, ring_color, label="?", url_mode="fi
     return (f'<circle cx="{cx}" cy="{cy}" r="{r}" fill="{INK}" '
             f'stroke="{ring_color}" stroke-width="4"/>'
             f'<text x="{cx}" y="{cy + 8}" text-anchor="middle" font-size="24" '
-            f'fill="{PARCHMENT}" font-weight="bold">{_esc((label or "?")[:1])}</text>')
+            f'fill="{PARCHMENT}" font-weight="bold" {_halo(4)}>'
+            f'{_esc((label or "?")[:1])}</text>')
 
 
 def _svg_bar(x, y, w, hp, max_hp, h=8, label=True):
@@ -240,7 +254,8 @@ def _svg_bar(x, y, w, hp, max_hp, h=8, label=True):
            f'rx="{(h - 2) / 2}" fill="{color}"/>')
     if label:
         out += (f'<text x="{x + w / 2}" y="{y + h + 13}" text-anchor="middle" '
-                f'font-size="12" fill="{PARCHMENT}">{_esc(hp)}/{_esc(max_hp)}</text>')
+                f'font-size="12" fill="{PARCHMENT}" {_halo(2.5)}>'
+                f'{_esc(hp)}/{_esc(max_hp)}</text>')
     return out
 
 
@@ -832,7 +847,7 @@ class GameViewer:
             parts.append(_nested_art(ad, n.get("asset") or _expected("npc", n.get("npc_id", "")),
                                      x, y, NPC_SIZE, VERDIGRIS, n.get("name", "?"), url_mode))
             parts.append(f'<text x="{cx}" y="{y - 8}" text-anchor="middle" font-size="13" '
-                         f'fill="{PARCHMENT}">{_esc(n.get("name", "?"))}</text>')
+                         f'fill="{PARCHMENT}" {_halo(2.5)}>{_esc(n.get("name", "?"))}</text>')
 
         # The character, front row: fighting stance in combat, relaxed pose
         # when no monsters are around.
@@ -843,7 +858,8 @@ class GameViewer:
         ppad = FOOT_PAD.get("player" if fighting else "player_standing", DEFAULT_FOOT_PAD)
         px, py = self._place(cx, player_feet, psize, ppad)
         parts.append(f'<text x="{cx}" y="{py - 40}" text-anchor="middle" font-size="14" '
-                     f'fill="{GOLD}" font-weight="bold">{_esc(name)} · Lv {_esc(me.get("level", "?"))}</text>')
+                     f'fill="{GOLD}" font-weight="bold" {_halo(3)}>'
+                     f'{_esc(name)} · Lv {_esc(me.get("level", "?"))}</text>')
         parts.append(_svg_bar(cx - 50, py - 32, 100,
                               me.get("hp", 0), me.get("max_hp", 0)))
         parts.append(self._shadow(cx, player_feet, psize * 0.5))
@@ -861,7 +877,7 @@ class GameViewer:
             cxm = lay["monster_x0"] + i * (size + 45)
             xm, ym = self._place(cxm, monster_feet, size, pad, flot)
             parts.append(f'<text x="{cxm}" y="{ym - 36}" text-anchor="middle" '
-                         f'font-size="13" fill="{PARCHMENT}">{_esc(mname)}</text>')
+                         f'font-size="13" fill="{PARCHMENT}" {_halo(2.5)}>{_esc(mname)}</text>')
             parts.append(_svg_bar(cxm - 40, ym - 30, 80, m.get("hp", 0), m.get("max_hp", 0)))
             parts.append(self._shadow(cxm, monster_feet, size * 0.6))
             parts.append(_nested_art(ad, m.get("asset") or _expected("monster", mname),
@@ -871,10 +887,10 @@ class GameViewer:
                              f'<title>{_esc(m["drops"]["name"])}</title></circle>')
         if len(mons) > len(shown):
             parts.append(f'<text x="920" y="{monster_feet - 130}" text-anchor="middle" font-size="14" '
-                         f'fill="{SLATE}">+{len(mons) - len(shown)} more</text>')
+                         f'fill="{SLATE}" {_halo(2.5)}>+{len(mons) - len(shown)} more</text>')
         if not mons:
             parts.append(f'<text x="640" y="{monster_feet - 60}" text-anchor="middle" font-size="15" '
-                         f'fill="{SLATE}">No monsters — safe to rest.</text>')
+                         f'fill="{SLATE}" {_halo(3)}>No monsters — safe to rest.</text>')
 
         # Loot lying on the ground line.
         loot = [g for g in (world.get("items_on_ground", []) or []) if isinstance(g, dict)][:4]
@@ -886,13 +902,13 @@ class GameViewer:
                                      xg, yg, LOOT_SIZE, GOLD, g.get("name", "?"), url_mode))
             qty = f' x{g.get("qty", 1)}' if g.get("qty", 1) != 1 else ""
             parts.append(f'<text x="{cxg}" y="{yg - 6}" text-anchor="middle" font-size="12" '
-                         f'fill="{GOLD}">{_esc(g.get("name", "?"))}{_esc(qty)}</text>')
+                         f'fill="{GOLD}" {_halo(2.5)}>{_esc(g.get("name", "?"))}{_esc(qty)}</text>')
 
         # Caption
         parts.append(f'<text x="16" y="34" font-size="24" fill="{PARCHMENT}" '
-                     f'font-family="Georgia,serif">{_esc(loc_id)}</text>')
+                     f'font-family="Georgia,serif" {_halo(4)}>{_esc(loc_id)}</text>')
         parts.append(f'<text x="{STAGE_W - 16}" y="34" font-size="13" fill="{decor}" '
-                     f'text-anchor="end">{_esc(loc_type or "?")}</text>')
+                     f'text-anchor="end" {_halo(2.5)}>{_esc(loc_type or "?")}</text>')
         return "".join(parts)
 
     def _stage(self, me, world, loc_id, loc_type):
