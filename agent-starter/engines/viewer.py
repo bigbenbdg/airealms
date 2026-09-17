@@ -455,7 +455,17 @@ class GameViewer:
             with self._lock:
                 self._seq += 1
                 state["seq"] = self._seq
+                # Carry forward last-known HUD values: some frames are partial
+                # (e.g. GET /status carries no `kills` — only the per-action
+                # player snapshot does), so never blank a known number to "?".
+                prev = self._state or {}
+                for k in ("name", "level", "hp", "max_hp", "gold", "kills"):
+                    if state.get(k) in ("?", None) and prev.get(k) not in ("?", None):
+                        state[k] = prev[k]
                 self._state = state
+                carried = {k: state[k] for k in
+                           ("name", "level", "hp", "max_hp", "gold", "kills")
+                           if k in state}
             # Sidecar for debugging / headless runs.
             try:
                 tmp = self.state_path + ".tmp"
@@ -468,7 +478,8 @@ class GameViewer:
             # local server cannot bind (browser opened on file://).
             try:
                 page = self._render(turn, me or {}, here or {},
-                                    action_desc, result_narrative, log or [], status)
+                                    action_desc, result_narrative, log or [], status,
+                                    _fallback=carried)
                 tmp = self.path + ".tmp"
                 with open(tmp, "w", encoding="utf-8", newline="\n") as f:
                     f.write(page)
@@ -929,13 +940,21 @@ class GameViewer:
                 f'style="width:100%;height:auto;display:block;">'
                 f'{self._terrain_svg(loc_id, loc_type, baseline)}{tokens}</svg>')
 
-    def _render(self, turn, me_raw, here_raw, action_desc, result_narrative, log, status):
+    def _render(self, turn, me_raw, here_raw, action_desc, result_narrative, log, status,
+                _fallback=None):
         me = me_raw.get("data", me_raw) if isinstance(me_raw, dict) else {}
         world = here_raw.get("data", here_raw) if isinstance(here_raw, dict) else {}
         if not isinstance(me, dict):
             me, world = {}, {}
         if not isinstance(world, dict):
             world = {}
+        if isinstance(_fallback, dict) and isinstance(me, dict):
+            # Same carry-forward as the live state: never blank a known
+            # HUD number (e.g. kills, which GET /status does not return).
+            me = dict(me)
+            for k, v in _fallback.items():
+                if me.get(k) in ("?", None) and v not in ("?", None):
+                    me[k] = v
 
         name = me.get("name", "?")
         level = me.get("level", "?")
