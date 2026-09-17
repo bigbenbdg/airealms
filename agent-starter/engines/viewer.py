@@ -34,18 +34,60 @@ SKY = {"town": "#1E2436", "wild": "#16241F", "dungeon": "#1A1218"}
 GROUND = {"town": "#141824", "wild": "#101812", "dungeon": "#120D12"}
 DECOR = {"town": GOLD, "wild": VERDIGRIS, "dungeon": BLOOD}
 
-STAGE_W, STAGE_H = 960, 380
-# Ground line per location, in stage coordinates. Must match the Blender
-# backgrounds (scripts/make_backgrounds.py) so tokens stand on the terrain.
-BASELINE = {
-    "riverside_village": 308,
-    "sunken_marsh": 321,
-    "oakhollow_forest": 366,
-    "capital_city": 366,
-    "deep_cave": 366,
-    "ember_ridge": 366,
+STAGE_W, STAGE_H = 960, 540
+# Per-map stage layout in 960x540 coordinates (y=0 top). Validated in Blender
+# against assets/backgrounds/*.png (2848x1600, aspect 1.78 == 960/540) by
+# compositing each sprite as an alpha plane over the backdrop and rendering.
+# npc_y = feet line of the back row (smaller, further away); player_feet /
+# monster_feet = front-row feet; loot_y = ground-pile row. x slots keep each
+# map's focal point clear (village river, city gate stairs, cave crystals,
+# marsh water, ridge lava lake).
+STAGE_LAYOUT = {
+    "riverside_village": {"npc_y": 400, "player_feet": 470, "monster_feet": 460,
+                          "loot_y": 488, "player_x": 150, "npc_x0": 300,
+                          "monster_x0": 600},
+    "oakhollow_forest": {"npc_y": 395, "player_feet": 470, "monster_feet": 461,
+                         "loot_y": 488, "player_x": 150, "npc_x0": 420,
+                         "monster_x0": 600},
+    "capital_city": {"npc_y": 440, "player_feet": 475, "monster_feet": 465,
+                     "loot_y": 490, "player_x": 150, "npc_x0": 300,
+                     "monster_x0": 680},
+    "deep_cave": {"npc_y": 410, "player_feet": 470, "monster_feet": 465,
+                  "loot_y": 488, "player_x": 170, "npc_x0": 400,
+                  "monster_x0": 620},
+    "sunken_marsh": {"npc_y": 400, "player_feet": 475, "monster_feet": 450,
+                      "loot_y": 492, "player_x": 150, "npc_x0": 450,
+                      "monster_x0": 660},
+    "ember_ridge": {"npc_y": 460, "player_feet": 475, "monster_feet": 465,
+                    "loot_y": 490, "player_x": 150, "npc_x0": 350,
+                    "monster_x0": 620},
 }
-DEFAULT_BASELINE = 360
+DEFAULT_LAYOUT = {"npc_y": 420, "player_feet": 472, "monster_feet": 462,
+                  "loot_y": 488, "player_x": 150, "npc_x0": 350,
+                  "monster_x0": 600}
+# Backwards-compatible ground line (front-row feet) per location.
+BASELINE = {loc: v["player_feet"] for loc, v in STAGE_LAYOUT.items()}
+DEFAULT_BASELINE = DEFAULT_LAYOUT["player_feet"]
+
+# Sprite box sizes (square <image> box, px in stage space). Humans ~1.8m =
+# 150 front / 115 back (perspective); monsters scale with HP/body mass so a
+# Giant Rat reads small next to an Ember Drake. Measured content boxes in
+# Blender (alpha bbox) confirm visual hierarchy after padding compensation.
+PLAYER_SIZE_FIGHT, PLAYER_SIZE_STAND, NPC_SIZE, LOOT_SIZE = 150, 140, 115, 42
+MONSTER_SIZE = {
+    "Giant Rat": 70, "Forest Wolf": 85, "Road Bandit": 140,
+    "Marsh Wraith": 150, "Cave Troll": 190, "Ember Drake": 205,
+}
+DEFAULT_MONSTER_SIZE = 110
+# Bottom transparent padding fraction per sprite (Blender alpha-bbox measure),
+# used so the *visible* feet — not the image edge — sit on the ground line.
+FOOT_PAD = {
+    "player": 0.108, "player_standing": 0.086,
+    "Giant Rat": 0.149, "Forest Wolf": 0.165, "Road Bandit": 0.103,
+    "Marsh Wraith": 0.058, "Cave Troll": 0.07, "Ember Drake": 0.132,
+}
+DEFAULT_FOOT_PAD = 0.07
+WRAITH_FLOAT = 14  # the wraith hovers instead of standing
 
 LOCATION_TYPE = {
     "riverside_village": "town", "capital_city": "town",
@@ -283,65 +325,89 @@ class GameViewer:
                      f'height="{STAGE_H - baseline}" fill="{ground}"/>')
         return "".join(parts)
 
+    def _place(self, cx, feet_y, size, pad=DEFAULT_FOOT_PAD, float_px=0):
+        """Top-left y for an <image> box so visible feet rest on feet_y."""
+        y = feet_y - size + size * pad - float_px
+        return cx - size / 2, y
+
+    def _shadow(self, cx, feet_y, w):
+        return (f'<ellipse cx="{cx}" cy="{feet_y + 4}" rx="{w / 2}" ry="7" '
+                f'fill="#000000" opacity="0.35"/>')
+
     def _tokens_svg(self, me, world, loc_id, loc_type, baseline):
         """Character, monsters, loot, NPCs and labels, in stage coordinates."""
         ad = self.assets_dir
         decor = DECOR.get(loc_type, SLATE)
+        lay = STAGE_LAYOUT.get(loc_id, DEFAULT_LAYOUT)
+        npc_y = lay["npc_y"]
+        player_feet = lay["player_feet"]
+        monster_feet = lay["monster_feet"]
+        loot_y = lay["loot_y"]
         parts = []
 
-        # NPCs stand further back, above the baseline.
+        # NPCs: back row, human scale with perspective (~0.77x player).
         npcs = [n for n in (world.get("npcs", []) or []) if isinstance(n, dict)][:4]
         for i, n in enumerate(npcs):
-            x = 250 + i * 74
-            y = baseline - 118
+            cx = lay["npc_x0"] + i * 120
+            x, y = self._place(cx, npc_y, NPC_SIZE)
+            parts.append(self._shadow(cx, npc_y, NPC_SIZE * 0.55))
             parts.append(_nested_art(ad, n.get("asset") or _expected("npc", n.get("npc_id", "")),
-                                     x, y, 48, VERDIGRIS, n.get("name", "?")))
-            parts.append(f'<text x="{x + 24}" y="{y - 6}" text-anchor="middle" font-size="12" '
+                                     x, y, NPC_SIZE, VERDIGRIS, n.get("name", "?")))
+            parts.append(f'<text x="{cx}" y="{y - 8}" text-anchor="middle" font-size="13" '
                          f'fill="{PARCHMENT}">{_esc(n.get("name", "?"))}</text>')
 
-        # The character, front-left on the ground line: fighting stance in
-        # combat, relaxed standing pose when no monsters are around.
+        # The character, front row: fighting stance in combat, relaxed pose
+        # when no monsters are around.
         name = me.get("name", "?") if isinstance(me, dict) else "?"
-        cx, r = 148, 36
-        parts.append(f'<text x="{cx}" y="{baseline - 100}" text-anchor="middle" font-size="14" '
-                     f'fill="{GOLD}" font-weight="bold">{_esc(name)} · Lv {_esc(me.get("level", "?"))}</text>')
-        parts.append(_svg_bar(cx - 45, baseline - 92, 90,
-                              me.get("hp", 0), me.get("max_hp", 0)))
+        cx = lay["player_x"]
         fighting = bool([m for m in (world.get("monsters", []) or []) if isinstance(m, dict)])
+        psize = PLAYER_SIZE_FIGHT if fighting else PLAYER_SIZE_STAND
+        ppad = FOOT_PAD.get("player" if fighting else "player_standing", DEFAULT_FOOT_PAD)
+        px, py = self._place(cx, player_feet, psize, ppad)
+        parts.append(f'<text x="{cx}" y="{py - 40}" text-anchor="middle" font-size="14" '
+                     f'fill="{GOLD}" font-weight="bold">{_esc(name)} · Lv {_esc(me.get("level", "?"))}</text>')
+        parts.append(_svg_bar(cx - 50, py - 32, 100,
+                              me.get("hp", 0), me.get("max_hp", 0)))
+        parts.append(self._shadow(cx, player_feet, psize * 0.5))
         parts.append(_nested_art(ad, me.get("asset") or _expected("player", "fighting" if fighting else "standing"),
-                                 cx - r, baseline - 2 * r, 2 * r, GOLD, name))
+                                 px, py, psize, GOLD, name))
 
-        # Monsters, feet on the ground line.
+        # Monsters: front row, feet on their ground line, size by species.
         mons = [m for m in (world.get("monsters", []) or []) if isinstance(m, dict)]
         shown = mons[:4]
         for i, m in enumerate(shown):
-            size = 80
-            x = 430 + i * 132
-            y = baseline - size
-            parts.append(f'<text x="{x + size / 2}" y="{y - 34}" text-anchor="middle" '
-                         f'font-size="13" fill="{PARCHMENT}">{_esc(m.get("name", "?"))}</text>')
-            parts.append(_svg_bar(x + 7, y - 30, 66, m.get("hp", 0), m.get("max_hp", 0)))
-            parts.append(_nested_art(ad, m.get("asset") or _expected("monster", m.get("name", "")),
-                                     x, y, size, BLOOD, m.get("name", "?")))
+            mname = m.get("name", "?")
+            size = MONSTER_SIZE.get(mname, DEFAULT_MONSTER_SIZE)
+            pad = FOOT_PAD.get(mname, DEFAULT_FOOT_PAD)
+            flot = WRAITH_FLOAT if mname == "Marsh Wraith" else 0
+            cxm = lay["monster_x0"] + i * (size + 45)
+            xm, ym = self._place(cxm, monster_feet, size, pad, flot)
+            parts.append(f'<text x="{cxm}" y="{ym - 36}" text-anchor="middle" '
+                         f'font-size="13" fill="{PARCHMENT}">{_esc(mname)}</text>')
+            parts.append(_svg_bar(cxm - 40, ym - 30, 80, m.get("hp", 0), m.get("max_hp", 0)))
+            parts.append(self._shadow(cxm, monster_feet, size * 0.6))
+            parts.append(_nested_art(ad, m.get("asset") or _expected("monster", mname),
+                                     xm, ym, size, BLOOD, mname))
             if (m.get("drops") or {}).get("name"):
-                parts.append(f'<circle cx="{x + size - 4}" cy="{y + 8}" r="7" fill="{GOLD}">'
+                parts.append(f'<circle cx="{xm + size - 6}" cy="{ym + 10}" r="7" fill="{GOLD}">'
                              f'<title>{_esc(m["drops"]["name"])}</title></circle>')
         if len(mons) > len(shown):
-            parts.append(f'<text x="920" y="{baseline - 120}" text-anchor="middle" font-size="14" '
+            parts.append(f'<text x="920" y="{monster_feet - 130}" text-anchor="middle" font-size="14" '
                          f'fill="{SLATE}">+{len(mons) - len(shown)} more</text>')
         if not mons:
-            parts.append(f'<text x="620" y="{baseline - 70}" text-anchor="middle" font-size="15" '
+            parts.append(f'<text x="640" y="{monster_feet - 60}" text-anchor="middle" font-size="15" '
                          f'fill="{SLATE}">No monsters — safe to rest.</text>')
 
         # Loot lying on the ground line.
         loot = [g for g in (world.get("items_on_ground", []) or []) if isinstance(g, dict)][:4]
         for i, g in enumerate(loot):
-            x = 330 + i * 78
-            y = baseline - 40
+            cxg = 330 + i * 90
+            xg, yg = self._place(cxg, loot_y, LOOT_SIZE, 0.1)
+            parts.append(self._shadow(cxg, loot_y, LOOT_SIZE * 0.7))
             parts.append(_nested_art(ad, g.get("asset") or _expected("item", g.get("item_id", "")),
-                                     x, y, 40, GOLD, g.get("name", "?")))
+                                     xg, yg, LOOT_SIZE, GOLD, g.get("name", "?")))
             qty = f' x{g.get("qty", 1)}' if g.get("qty", 1) != 1 else ""
-            parts.append(f'<text x="{x + 20}" y="{y - 6}" text-anchor="middle" font-size="12" '
+            parts.append(f'<text x="{cxg}" y="{yg - 6}" text-anchor="middle" font-size="12" '
                          f'fill="{GOLD}">{_esc(g.get("name", "?"))}{_esc(qty)}</text>')
 
         # Caption
@@ -356,12 +422,13 @@ class GameViewer:
         tokens = self._tokens_svg(me, world, loc_id, loc_type, baseline)
         bg = self.background_url(loc_id)
         if bg:
-            # Blender backdrop image with the tokens layered on top.
+            # Backdrop PNG is 2848x1600 (1.78) == 960x540 stage, so the SVG
+            # overlay maps 1:1 with preserveAspectRatio="xMidYMid meet".
             return (
-                f'<div style="position:relative;border-radius:10px;overflow:hidden;">'
+                f'<div style="position:relative;border-radius:10px;overflow:hidden;aspect-ratio:16/9;">'
                 f'<img src="{_esc(bg)}" alt="{_esc(loc_id)}" '
-                f'style="width:100%;display:block;"/>'
-                f'<svg viewBox="0 0 {STAGE_W} {STAGE_H}" '
+                f'style="width:100%;height:100%;object-fit:cover;display:block;"/>'
+                f'<svg viewBox="0 0 {STAGE_W} {STAGE_H}" preserveAspectRatio="xMidYMid meet" '
                 f'style="position:absolute;inset:0;width:100%;height:100%;">{tokens}</svg>'
                 f'</div>')
         return (f'<svg viewBox="0 0 {STAGE_W} {STAGE_H}" '
