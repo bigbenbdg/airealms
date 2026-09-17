@@ -5,8 +5,12 @@ Usage:
     python scripts/make_assets.py --check   # exit 1 if any file missing
 
 Reads repo-root assets.json (the 42-asset inventory) and writes
-assets/locations/*.svg, assets/monsters/*.svg, assets/npcs/*.svg,
+assets/locations/*.svg,
 assets/items/*.svg plus assets/manifest.json mapping every id -> file.
+Monster portraits (assets/monsters/*.png), NPC portraits
+(assets/npcs/*.png), and the player portraits (assets/player/*.png)
+are hand-authored PNGs — listed in
+assets.json/manifest.json, presence-checked here, but never generated.
 
 Style matches frontend/src/App.jsx palette: INK #12141C, GOLD #C9A24B,
 VERDIGRIS #4E9585, BLOOD #9E3B34, PARCHMENT #EDE7D9.
@@ -88,6 +92,7 @@ def location_svg(loc):
 
 
 def monster_svg(mon):
+    """Legacy procedural monster portrait (unused — monsters are hand-authored PNGs)."""
     emoji = MONSTER_EMOJI.get(mon["name"], "\u2753")
     hp = mon.get("hp", 10)
     ring = 7 if hp >= 30 else 5
@@ -102,6 +107,7 @@ def monster_svg(mon):
 
 
 def npc_svg(npc):
+    """Legacy procedural NPC portrait (unused — NPCs are hand-authored PNGs)."""
     initial = (npc.get("name") or "?").strip()[:1].upper()
     color = VERDIGRIS if npc.get("role") == "merchant" else GOLD
     body = (
@@ -147,11 +153,11 @@ def main():
     jobs = []
     for loc in inv.get("locations", []):
         jobs.append((loc["file"], location_svg(loc)))
-    for mon in inv.get("monsters", []):
-        key = mon["name"].lower().replace(" ", "_")
-        jobs.append((f"assets/monsters/{key}.svg", monster_svg(mon)))
-    for npc in inv.get("npcs", []):
-        jobs.append((npc["file"], npc_svg(npc)))
+    # Monsters, NPCs, and the player portrait are hand-authored PNGs:
+    # presence-checked, never generated.
+    monster_files = [mon["file"] for mon in inv.get("monsters", [])]
+    npc_files = [npc["file"] for npc in inv.get("npcs", [])]
+    player_files = list((inv.get("player", {}) or {}).values())
     for item in inv.get("items", []):
         jobs.append((item["file"], item_svg(item)))
 
@@ -160,6 +166,8 @@ def main():
     backgrounds = inv.get("backgrounds", {}) or {}
     missing = [rel for rel, _ in jobs
                if not os.path.exists(os.path.join(ROOT, rel))]
+    missing += [rel for rel in monster_files + npc_files + player_files
+                if not os.path.exists(os.path.join(ROOT, rel))]
     missing_bg = [rel for rel in backgrounds.values()
                   if not os.path.exists(os.path.join(ROOT, rel))]
     if check_only:
@@ -184,14 +192,15 @@ def main():
             f.write(content)
 
     manifest = {"version": inv.get("version", "1.0.0"), "locations": {},
-                "monsters": {}, "npcs": {}, "items": {}, "backgrounds": {}}
+                "monsters": {}, "npcs": {}, "player": {}, "items": {}, "backgrounds": {}}
     for loc in inv.get("locations", []):
         manifest["locations"][loc["id"]] = loc["file"]
     for mon in inv.get("monsters", []):
-        key = mon["name"].lower().replace(" ", "_")
-        manifest["monsters"][mon["name"]] = f"assets/monsters/{key}.svg"
+        manifest["monsters"][mon["name"]] = mon["file"]
     for npc in inv.get("npcs", []):
         manifest["npcs"][npc["npc_id"]] = npc["file"]
+    for key, rel in (inv.get("player", {}) or {}).items():
+        manifest["player"][key] = rel
     for item in inv.get("items", []):
         manifest["items"][item["item_id"]] = item["file"]
     for loc_id, rel in backgrounds.items():
@@ -200,7 +209,7 @@ def main():
               encoding="utf-8", newline="\n") as f:
         json.dump(manifest, f, indent=2)
         f.write("\n")
-    print(f"Wrote {len(jobs)} SVG files + assets/manifest.json.")
+    print(f"Wrote {len(jobs)} SVG files (+ {len(monster_files) + len(npc_files) + len(player_files)} monster/NPC/player PNGs checked) + assets/manifest.json.")
     return 0
 
 

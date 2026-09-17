@@ -1,7 +1,7 @@
 """Game-art resolver for the reference agent (stdlib only).
 
 Every function here is fallback-first: missing assets/ dir, missing
-manifest, missing SVG, or missing server asset fields must NEVER break
+manifest, missing art file, or missing server asset fields must NEVER break
 the turn loop — the caller gets emoji/text instead and play continues.
 """
 import json
@@ -65,7 +65,7 @@ def _local_file(assets_dir, rel):
     try:
         if not assets_dir or not rel:
             return None
-        # rel looks like "assets/locations/x.svg"; allow both repo-relative
+        # rel looks like "assets/locations/x.svg" or "assets/<monsters|npcs>/x.png"; allow both repo-relative
         # and dir-relative forms.
         base = os.path.basename(rel)
         parent = os.path.basename(os.path.dirname(rel)) or ""
@@ -96,9 +96,13 @@ def _expected(kind, key):
         if kind == "location":
             return f"assets/locations/{key}.svg"
         if kind == "monster":
-            return f"assets/monsters/{(key or '').lower().replace(' ', '_')}.svg"
+            return f"assets/monsters/{(key or '').lower().replace(' ', '_')}.png"
         if kind == "npc":
-            return f"assets/npcs/{key}.svg"
+            return f"assets/npcs/{key}.png"
+        if kind == "player":
+            # Fighting stance by default; relaxed pose only when safe.
+            return ("assets/player/player_standing.png" if key == "standing"
+                    else "assets/player/player.png")
         if kind == "item":
             return f"assets/items/{key}.svg"
     except Exception:
@@ -161,13 +165,14 @@ def scene_block(me, here, assets_dir=None):
             lines.append("  Loot: " + "; ".join(bits))
         inv = me.get("inventory", []) or []
         gear = [i for i in inv if isinstance(i, dict) and i.get("equipped")]
-        if gear:
-            bits = []
-            for i in gear[:2]:
-                rel = i.get("asset") or _expected("item", i.get("item_id", ""))
-                kind = i.get("kind", "weapon" if "attack" in i else "armor")
-                bits.append(f"{i.get('name', '?')} {_tag(assets_dir, rel, KIND_EMOJI.get(kind, ''))}")
-            lines.append("  You: " + ", ".join(bits))
+        fighting = bool(world.get("monsters"))
+        prel = me.get("asset") or _expected("player", "fighting" if fighting else "standing")
+        bits = [f"{me.get('name', 'you')} {_tag(assets_dir, prel, '🧙')}"]
+        for i in gear[:2]:
+            rel = i.get("asset") or _expected("item", i.get("item_id", ""))
+            kind = i.get("kind", "weapon" if "attack" in i else "armor")
+            bits.append(f"{i.get('name', '?')} {_tag(assets_dir, rel, KIND_EMOJI.get(kind, ''))}")
+        lines.append("  You: " + ", ".join(bits))
         if assets_dir is None:
             lines.append("  (art fallback: assets/ not found — showing emoji)")
         return "\n".join(lines)

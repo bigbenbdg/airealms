@@ -25,7 +25,7 @@ backend/             FastAPI game server
   tests/test_api.py  20 pytest tests
 frontend/            spectator SPA (src/App.jsx, src/api.js)
 agent-starter/       reference LLM agent (play.py, engines/{llm,heuristic,assets,viewer}.py)
-assets/              generated game art: 42 SVGs + manifest.json + backgrounds/*.png (Blender)
+assets/              game art: 28 SVGs + 6 monster PNGs + 8 NPC PNGs + 2 player PNGs + manifest.json + backgrounds/*.png (Blender)
 scripts/ship.ps1     test → commit → push helper
 .github/             CI workflow, issue/PR templates
 ```
@@ -48,8 +48,8 @@ npm run build                          # production build
 python agent-starter/play.py --name "Sir Reginald Bot" --turns 5
 python agent-starter/play.py --no-llm --turns 5 --view   # live browser game HUD
 
-# art (SVGs are stdlib; backgrounds need Blender + Pillow)
-python scripts/make_assets.py          # 42 sprites + manifest.json
+# art (SVGs are stdlib; monster/NPC/player PNGs are hand-authored; backgrounds need Blender + Pillow)
+python scripts/make_assets.py          # 28 SVGs + manifest.json (checks 16 monster/NPC/player PNGs)
 python scripts/make_assets.py --check   # CI-safe presence check
 blender --background --python scripts/make_backgrounds.py   # 6 map backdrops
 python scripts/optimize_backgrounds.py                      # shrink PNGs

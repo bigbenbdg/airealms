@@ -9,8 +9,8 @@ so it plays like a little side-view game scene while the CLI loop runs:
   monsters, loot and NPCs standing on the scene's ground line, then the HUD
   panels (pack, quests, adventure log) underneath.
 
-Fallback-first like engines/assets.py: missing PNGs fall back to drawn
-terrain, missing SVGs become shapes/emoji, missing state becomes "?", and no
+Fallback-first like engines/assets.py: missing backgrounds fall back to drawn
+terrain, missing art (SVG locations/items, PNG monsters/NPCs) becomes shapes/emoji, missing state becomes "?", and no
 exception ever escapes into the turn loop. Set AIREALMS_NO_BROWSER=1 to write
 the file without popping a browser (useful for tests / headless runs).
 """
@@ -85,9 +85,17 @@ def _hp_color(hp, max_hp):
 
 
 def _svg_or_emoji(assets_dir, rel, emoji, size=64):
-    """Inline SVG <size>px square, or a big emoji fallback. Never raises."""
+    """Inline art <size>px square (SVG markup or PNG <img>), or a big emoji fallback. Never raises."""
     try:
         path = _local_file(assets_dir, rel or "")
+        if path and path.lower().endswith(".png"):
+            url = _file_url(path)
+            if url:
+                return (f'<img src="{_esc(url)}" alt="" width="{size}" height="{size}" '
+                        f'style="width:{size}px;height:{size}px;object-fit:contain;"/>')
+            return (f'<div style="width:{size}px;height:{size}px;font-size:{size // 2}px;'
+                    f'display:flex;align-items:center;justify-content:center;">'
+                    f'{_esc(emoji or "?")}</div>')
         if path:
             with open(path, encoding="utf-8") as f:
                 svg = f.read()
@@ -110,6 +118,8 @@ def _asset_inner(assets_dir, rel):
         path = _local_file(assets_dir, rel or "")
         if not path:
             return None
+        if path.lower().endswith(".png"):
+            return None  # PNGs are embedded via <image>, not inlined
         with open(path, encoding="utf-8") as f:
             svg = f.read()
         start = svg.find(">")
@@ -124,6 +134,12 @@ def _asset_inner(assets_dir, rel):
 def _nested_art(assets_dir, rel, x, y, size, ring_color, label="?"):
     """Place asset artwork on the stage; falls back to a ringed token."""
     try:
+        path = _local_file(assets_dir, rel or "")
+        if path and path.lower().endswith(".png"):
+            url = _file_url(path)
+            if url:
+                return (f'<image href="{_esc(url)}" x="{x}" y="{y}" '
+                        f'width="{size}" height="{size}" preserveAspectRatio="xMidYMid meet"/>')
         inner = _asset_inner(assets_dir, rel)
         if inner:
             return (f'<svg x="{x}" y="{y}" width="{size}" height="{size}" '
@@ -283,19 +299,17 @@ class GameViewer:
             parts.append(f'<text x="{x + 24}" y="{y - 6}" text-anchor="middle" font-size="12" '
                          f'fill="{PARCHMENT}">{_esc(n.get("name", "?"))}</text>')
 
-        # The character, front-left on the ground line.
+        # The character, front-left on the ground line: fighting stance in
+        # combat, relaxed standing pose when no monsters are around.
         name = me.get("name", "?") if isinstance(me, dict) else "?"
-        initial = (str(name).strip()[:1] or "?").upper()
         cx, r = 148, 36
         parts.append(f'<text x="{cx}" y="{baseline - 100}" text-anchor="middle" font-size="14" '
                      f'fill="{GOLD}" font-weight="bold">{_esc(name)} · Lv {_esc(me.get("level", "?"))}</text>')
         parts.append(_svg_bar(cx - 45, baseline - 92, 90,
                               me.get("hp", 0), me.get("max_hp", 0)))
-        parts.append(f'<circle cx="{cx}" cy="{baseline - r}" r="{r}" fill="{INK}" '
-                     f'stroke="{GOLD}" stroke-width="5"/>'
-                     f'<text x="{cx}" y="{baseline - r + 12}" text-anchor="middle" font-size="32" '
-                     f'fill="{PARCHMENT}" font-weight="bold" '
-                     f'font-family="Georgia,serif">{_esc(initial)}</text>')
+        fighting = bool([m for m in (world.get("monsters", []) or []) if isinstance(m, dict)])
+        parts.append(_nested_art(ad, me.get("asset") or _expected("player", "fighting" if fighting else "standing"),
+                                 cx - r, baseline - 2 * r, 2 * r, GOLD, name))
 
         # Monsters, feet on the ground line.
         mons = [m for m in (world.get("monsters", []) or []) if isinstance(m, dict)]

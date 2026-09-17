@@ -1162,16 +1162,22 @@ def test_assets_manifest_and_world_asset_fields():
     assert m.status_code == 200, m.text
     mf = m.json()["data"]
     assert len(mf["locations"]) == 6
+    assert len(mf["monsters"]) == 6
     assert len(mf["npcs"]) == 8
     # every manifest target in assets.json must resolve to an expected path
     inv = _json.load(open(_os.path.join(_os.path.dirname(__file__), "..", "..", "assets.json")))
     assert mf["locations"]["riverside_village"] == "assets/locations/riverside_village.svg"
-    assert mf["npcs"]["npc_blacksmith"] == "assets/npcs/npc_blacksmith.svg"
+    assert mf["monsters"]["Forest Wolf"] == "assets/monsters/forest_wolf.png"
+    assert mf["npcs"]["npc_blacksmith"] == "assets/npcs/npc_blacksmith.png"
+    assert mf["player"]["default"] == "assets/player/player.png"
+    assert mf["player"]["standing"] == "assets/player/player_standing.png"
     assert mf["items"]["itm_rat_pelt"] == "assets/items/itm_rat_pelt.svg"
     assert len(inv["items"]) == 22
-    # generated SVG files exist on disk
+    # generated art files exist on disk (SVG locations/items, PNG monsters/NPCs)
     root = _os.path.join(_os.path.dirname(__file__), "..", "..")
-    for rel in list(mf["locations"].values()) + list(mf["npcs"].values()):
+    for rel in (list(mf["locations"].values()) + list(mf["monsters"].values())
+                + list(mf["npcs"].values()) + list(mf["player"].values())
+                + list(mf["items"].values())):
         assert _os.path.exists(_os.path.join(root, rel)), rel
     # world + status responses carry additive asset fields (never break old keys)
     reg = register(c, "ArtBot")
@@ -1181,12 +1187,45 @@ def test_assets_manifest_and_world_asset_fields():
     assert all("asset" in n for n in here["npcs"])
     st = c.get("/api/v1/status", headers=h).json()["data"]
     assert st["location_asset"] == "assets/locations/riverside_village.svg"
+    # spawn town is monster-free: relaxed standing portrait, not fighting stance
+    assert st["asset"] == "assets/player/player_standing.png"
     assert all("asset" in i for i in st["inventory"])
     state = c.get("/api/v1/world/state").json()["data"]["zones"]
     assert all("asset" in z for z in state)
     # static file serving works when assets/ exists
     r = c.get("/assets/manifest.json")
     assert r.status_code == 200
+    png = c.get("/assets/npcs/npc_blacksmith.png")
+    assert png.status_code == 200
+    assert png.content[:8] == b"\x89PNG\r\n\x1a\n"
+    mon = c.get("/assets/monsters/forest_wolf.png")
+    assert mon.status_code == 200
+    assert mon.content[:8] == b"\x89PNG\r\n\x1a\n"
+    pc = c.get("/assets/player/player.png")
+    assert pc.status_code == 200
+    assert pc.content[:8] == b"\x89PNG\r\n\x1a\n"
+    pcs = c.get("/assets/player/player_standing.png")
+    assert pcs.status_code == 200
+    assert pcs.content[:8] == b"\x89PNG\r\n\x1a\n"
+
+
+def test_player_stance_switches_with_combat():
+    c = fresh_client()
+    reg = register(c, "StanceBot")
+    h = {"Authorization": f"Bearer {reg['api_key']}"}
+    # safe town: standing pose
+    st = c.get("/api/v1/status", headers=h).json()["data"]
+    assert st["asset"] == "assets/player/player_standing.png"
+    # monster zone: fighting stance
+    mv = c.post("/api/v1/actions", json={"action": "move", "params": {"to": "oakhollow_forest"}}, headers=h)
+    assert mv.status_code == 200, mv.text
+    here = c.get("/api/v1/world/here", headers=h).json()["data"]
+    assert len(here["monsters"]) > 0
+    st2 = c.get("/api/v1/status", headers=h).json()["data"]
+    assert st2["asset"] == "assets/player/player.png"
+    zones = {z["id"]: z for z in c.get("/api/v1/world/state").json()["data"]["zones"]}
+    assert zones["oakhollow_forest"]["agents"][0]["asset"] == "assets/player/player.png"
+    assert zones["riverside_village"]["agents"] == []
 
 
 def test_background_assets_match_locations():

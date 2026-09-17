@@ -5,9 +5,14 @@
     "locations": 6,
     "monsters": 6,
     "npcs": 8,
+    "player": 2,
     "items": 22,
     "backgrounds": 6,
-    "total": 42
+    "total": 44
+  },
+  "player": {
+    "default": "assets/player/player.png",
+    "standing": "assets/player/player_standing.png"
   },
   "backgrounds": {
     "riverside_village": "assets/backgrounds/riverside_village.png",
@@ -61,42 +66,42 @@
       "zones": ["oakhollow_forest"],
       "hp": 8,
       "drop": { "item_id": "itm_rat_pelt", "name": "Rat Pelt", "chance": 1.0 },
-      "file": "assets/monsters/giant_rat.svg"
+      "file": "assets/monsters/giant_rat.png"
     },
     {
       "name": "Forest Wolf",
       "zones": ["oakhollow_forest"],
       "hp": 14,
       "drop": { "item_id": "itm_wolf_pelt", "name": "Wolf Pelt", "chance": 0.6 },
-      "file": "assets/monsters/forest_wolf.svg"
+      "file": "assets/monsters/forest_wolf.png"
     },
     {
       "name": "Road Bandit",
       "zones": ["capital_city"],
       "hp": 16,
       "drop": { "item_id": "itm_bandit_dagger", "name": "Bandit Dagger", "chance": 0.5 },
-      "file": "assets/monsters/road_bandit.svg"
+      "file": "assets/monsters/road_bandit.png"
     },
     {
       "name": "Marsh Wraith",
       "zones": ["sunken_marsh"],
       "hp": 22,
       "drop": { "item_id": "itm_wraith_essence", "name": "Wraith Essence", "chance": 0.7 },
-      "file": "assets/monsters/marsh_wraith.svg"
+      "file": "assets/monsters/marsh_wraith.png"
     },
     {
       "name": "Cave Troll",
       "zones": ["deep_cave"],
       "hp": 30,
       "drop": { "item_id": "itm_troll_hide", "name": "Troll Hide", "chance": 0.8 },
-      "file": "assets/monsters/cave_troll.svg"
+      "file": "assets/monsters/cave_troll.png"
     },
     {
       "name": "Ember Drake",
       "zones": ["ember_ridge"],
       "hp": 45,
       "drop": { "item_id": "itm_drake_scale", "name": "Drake Scale", "chance": 0.6 },
-      "file": "assets/monsters/ember_drake.svg"
+      "file": "assets/monsters/ember_drake.png"
     }
   ],
   "npcs": [
@@ -105,56 +110,56 @@
       "name": "Old Toran",
       "location": "riverside_village",
       "role": "quest-giver",
-      "file": "assets/npcs/npc_blacksmith.svg"
+      "file": "assets/npcs/npc_blacksmith.png"
     },
     {
       "npc_id": "npc_innkeeper",
       "name": "Mira the Innkeep",
       "location": "riverside_village",
       "role": "lore",
-      "file": "assets/npcs/npc_innkeeper.svg"
+      "file": "assets/npcs/npc_innkeeper.png"
     },
     {
       "npc_id": "npc_armorer_sella",
       "name": "Armorer Sella",
       "location": "riverside_village",
       "role": "merchant",
-      "file": "assets/npcs/npc_armorer_sella.svg"
+      "file": "assets/npcs/npc_armorer_sella.png"
     },
     {
       "npc_id": "npc_scout",
       "name": "Scout Liora",
       "location": "oakhollow_forest",
       "role": "quest-giver",
-      "file": "assets/npcs/npc_scout.svg"
+      "file": "assets/npcs/npc_scout.png"
     },
     {
       "npc_id": "npc_captain",
       "name": "Captain Voss",
       "location": "capital_city",
       "role": "quest-giver",
-      "file": "assets/npcs/npc_captain.svg"
+      "file": "assets/npcs/npc_captain.png"
     },
     {
       "npc_id": "npc_merchant",
       "name": "Merchant Pella",
       "location": "capital_city",
       "role": "quest-giver",
-      "file": "assets/npcs/npc_merchant.svg"
+      "file": "assets/npcs/npc_merchant.png"
     },
     {
       "npc_id": "npc_hermit",
       "name": "Marsh Hermit",
       "location": "sunken_marsh",
       "role": "quest-giver",
-      "file": "assets/npcs/npc_hermit.svg"
+      "file": "assets/npcs/npc_hermit.png"
     },
     {
       "npc_id": "npc_warden",
       "name": "Warden Cassia",
       "location": "ember_ridge",
       "role": "quest-giver",
-      "file": "assets/npcs/npc_warden.svg"
+      "file": "assets/npcs/npc_warden.png"
     }
   ],
   "items": [

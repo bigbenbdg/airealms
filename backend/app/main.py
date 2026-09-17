@@ -64,11 +64,16 @@ def _bg_asset(loc_id):
 
 
 def _mon_asset(name):
-    return f"assets/monsters/{(name or '').lower().replace(' ', '_')}.svg"
+    return f"assets/monsters/{(name or '').lower().replace(' ', '_')}.png"
 
 
 def _npc_asset(npc_id):
-    return f"assets/npcs/{npc_id}.svg"
+    return f"assets/npcs/{npc_id}.png"
+
+
+def _player_asset(standing=False):
+    """Player portrait: fighting stance in combat, relaxed standing pose when safe."""
+    return "assets/player/player_standing.png" if standing else "assets/player/player.png"
 
 
 def _item_asset(item_id):
@@ -84,6 +89,7 @@ def assets_manifest():
             pass
     return {"version": "1.0.0", "locations": {l["id"]: _loc_asset(l["id"]) for l in LOCATIONS},
             "monsters": {}, "npcs": {n["npc_id"]: _npc_asset(n["npc_id"]) for n in NPCS},
+            "player": {"default": _player_asset(), "standing": _player_asset(standing=True)},
             "items": {}}
 
 
@@ -286,12 +292,12 @@ def meta_goals():
 
 @app.get("/api/v1/meta/assets")
 def meta_assets():
-    """Game-art manifest: every location/monster/NPC/item -> repo-relative SVG path.
+    """Game-art manifest: every location/monster/NPC/player/item -> repo-relative asset path.
 
     Clients resolve locally (assets/...) or via the server's /assets mount.
     Missing files are fine — fall back to emoji/text, never fail the turn.
     """
-    return ok(assets_manifest(), "Game art manifest: SVG per location, monster, NPC, and item.")
+    return ok(assets_manifest(), "Game art manifest: SVG per location and item; PNG for player (fighting + standing stances), monsters, NPCs, and backgrounds.")
 
 
 @app.get("/api/v1/actions/schema")
@@ -348,6 +354,7 @@ def status(agent: Agent = Depends(get_agent), db: Session = Depends(get_db)):
                      f"Top lesson: {report['lessons'][1]}")
     inv_out = [{**i, "asset": _item_asset(i.get("item_id", ""))} if isinstance(i, dict) and "asset" not in i else i
                for i in inv]
+    in_combat = db.query(Monster).filter(Monster.location == agent.location, Monster.alive == True).count() > 0  # noqa: E712
     return ok({
         "agent_id": agent.id, "name": agent.name, "level": agent.level, "xp": agent.xp,
         "xp_to_next_level": xp_for_level(agent.level), "hp": agent.hp, "max_hp": agent.max_hp,
@@ -355,6 +362,7 @@ def status(agent: Agent = Depends(get_agent), db: Session = Depends(get_db)):
         "stats": load_json(agent.stats, {}), "gold": agent.gold, "location": agent.location,
         "model": getattr(agent, "model", "") or None,
         "provider": getattr(agent, "provider", "") or None,
+        "asset": _player_asset(standing=not in_combat),
         "status_effects": [], "inventory": inv_out,
         "location_asset": _loc_asset(agent.location),
         "location_background": _bg_asset(agent.location),
@@ -397,7 +405,8 @@ def world_here(agent: Agent = Depends(get_agent), db: Session = Depends(get_db))
                "asset": _loc_asset(loc["id"]),
                "background": _bg_asset(loc["id"]),
                "exits": exits_from(loc["id"]), "npcs": npcs, "monsters": monsters,
-               "agents_present": [{"agent_id": o.id, "name": o.name, "level": o.level} for o in others],
+               "agents_present": [{"agent_id": o.id, "name": o.name, "level": o.level,
+                                    "asset": _player_asset(standing=not monsters)} for o in others],
                "items_on_ground": ground},
               narrative)
 
@@ -410,6 +419,13 @@ def world_map():
 
 def zone_snapshot(db: Session, loc):
     """Full intel for one place: quests, NPCs, monsters, loot, players, exits."""
+    monsters = []
+    for m in db.query(Monster).filter(Monster.location == loc["id"], Monster.alive == True).all():  # noqa: E712
+        drop = MONSTER_DROPS.get(m.name)
+        monsters.append({"monster_id": m.id, "name": m.name, "hp": m.hp,
+                         "max_hp": m.max_hp, "asset": _mon_asset(m.name),
+                         "drops": ({"name": drop["name"], "chance": drop["chance"]}
+                                   if drop else None)})
     agents = []
     for a in db.query(Agent).filter(Agent.location == loc["id"]).all():
         combat = player_combat_stats(a)
@@ -418,14 +434,8 @@ def zone_snapshot(db: Session, loc):
                        "attack": combat["attack"], "defense": combat["defense"],
                        "model": getattr(a, "model", "") or None,
                        "provider": getattr(a, "provider", "") or None,
+                       "asset": _player_asset(standing=not monsters),
                        "alive": a.alive})
-    monsters = []
-    for m in db.query(Monster).filter(Monster.location == loc["id"], Monster.alive == True).all():  # noqa: E712
-        drop = MONSTER_DROPS.get(m.name)
-        monsters.append({"monster_id": m.id, "name": m.name, "hp": m.hp,
-                         "max_hp": m.max_hp, "asset": _mon_asset(m.name),
-                         "drops": ({"name": drop["name"], "chance": drop["chance"]}
-                                   if drop else None)})
     loot = [{"ground_id": g.id, "item_id": g.item_id, "name": g.name, "qty": g.qty,
              "asset": _item_asset(g.item_id)}
             for g in db.query(GroundItem).filter(GroundItem.location == loc["id"]).all()]

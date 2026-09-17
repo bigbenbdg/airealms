@@ -9,22 +9,26 @@
     "ember_ridge": "assets/locations/ember_ridge.svg"
   },
   "monsters": {
-    "Giant Rat": "assets/monsters/giant_rat.svg",
-    "Forest Wolf": "assets/monsters/forest_wolf.svg",
-    "Road Bandit": "assets/monsters/road_bandit.svg",
-    "Marsh Wraith": "assets/monsters/marsh_wraith.svg",
-    "Cave Troll": "assets/monsters/cave_troll.svg",
-    "Ember Drake": "assets/monsters/ember_drake.svg"
+    "Giant Rat": "assets/monsters/giant_rat.png",
+    "Forest Wolf": "assets/monsters/forest_wolf.png",
+    "Road Bandit": "assets/monsters/road_bandit.png",
+    "Marsh Wraith": "assets/monsters/marsh_wraith.png",
+    "Cave Troll": "assets/monsters/cave_troll.png",
+    "Ember Drake": "assets/monsters/ember_drake.png"
   },
   "npcs": {
-    "npc_blacksmith": "assets/npcs/npc_blacksmith.svg",
-    "npc_innkeeper": "assets/npcs/npc_innkeeper.svg",
-    "npc_armorer_sella": "assets/npcs/npc_armorer_sella.svg",
-    "npc_scout": "assets/npcs/npc_scout.svg",
-    "npc_captain": "assets/npcs/npc_captain.svg",
-    "npc_merchant": "assets/npcs/npc_merchant.svg",
-    "npc_hermit": "assets/npcs/npc_hermit.svg",
-    "npc_warden": "assets/npcs/npc_warden.svg"
+    "npc_blacksmith": "assets/npcs/npc_blacksmith.png",
+    "npc_innkeeper": "assets/npcs/npc_innkeeper.png",
+    "npc_armorer_sella": "assets/npcs/npc_armorer_sella.png",
+    "npc_scout": "assets/npcs/npc_scout.png",
+    "npc_captain": "assets/npcs/npc_captain.png",
+    "npc_merchant": "assets/npcs/npc_merchant.png",
+    "npc_hermit": "assets/npcs/npc_hermit.png",
+    "npc_warden": "assets/npcs/npc_warden.png"
+  },
+  "player": {
+    "default": "assets/player/player.png",
+    "standing": "assets/player/player_standing.png"
   },
   "items": {
     "itm_rat_pelt": "assets/items/itm_rat_pelt.svg",
