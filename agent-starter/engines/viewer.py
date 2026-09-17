@@ -1,22 +1,32 @@
 """In-game viewer for the reference agent (stdlib only).
 
-`python play.py --view` writes a self-contained `viewer.html` every turn and
-opens it once in your browser. The page auto-refreshes via `<meta refresh>`,
-so it plays like a little side-view game scene while the CLI loop runs:
+`python play.py --view` serves a live game HUD on 127.0.0.1 (stdlib
+http.server, no full-page reload) and opens it once in your browser. The page
+fetches `state.json` and patches only what changed — backdrop image
+crossfades, tokens/HUD update in place — so there is no 2s flicker:
 
   Blender-rendered map background (assets/backgrounds/<loc>.png) or a
   procedurally drawn one when that art is missing, with the character,
   monsters, loot and NPCs standing on the scene's ground line, then the HUD
   panels (pack, quests, adventure log) underneath.
 
+A file snapshot (`viewer.html` + `viewer-state.json`) is still written every
+turn for headless runs / debugging; the file copy keeps the legacy
+`<meta refresh>` fallback when the local server cannot bind.
+
 Fallback-first like engines/assets.py: missing backgrounds fall back to drawn
 terrain, missing art (SVG locations/items, PNG monsters/NPCs) becomes shapes/emoji, missing state becomes "?", and no
 exception ever escapes into the turn loop. Set AIREALMS_NO_BROWSER=1 to write
-the file without popping a browser (useful for tests / headless runs).
+the files without popping a browser (useful for tests / headless runs).
 """
 import html
+import json
+import mimetypes
 import os
 import tempfile
+import threading
+import urllib.parse
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from engines.assets import _local_file, _expected
 
@@ -126,12 +136,30 @@ def _hp_color(hp, max_hp):
     return BLOOD
 
 
-def _svg_or_emoji(assets_dir, rel, emoji, size=64):
+def _http_asset_path(assets_dir, rel):
+    """Public /assets/... path for a repo-relative asset, or '' when missing. Never raises."""
+    try:
+        path = _local_file(assets_dir, rel or "")
+        if not path or not os.path.exists(path):
+            return ""
+        base = os.path.abspath(assets_dir)
+        rel_path = os.path.relpath(os.path.abspath(path), base).replace(os.sep, "/")
+        if rel_path.startswith(".."):
+            return ""
+        return "/assets/" + rel_path
+    except Exception:
+        return ""
+
+
+def _svg_or_emoji(assets_dir, rel, emoji, size=64, url_mode="file"):
     """Inline art <size>px square (SVG markup or PNG <img>), or a big emoji fallback. Never raises."""
     try:
         path = _local_file(assets_dir, rel or "")
         if path and path.lower().endswith(".png"):
-            url = _file_url(path)
+            if url_mode == "http":
+                url = _http_asset_path(assets_dir, rel or "")
+            else:
+                url = _file_url(path)
             if url:
                 return (f'<img src="{_esc(url)}" alt="" width="{size}" height="{size}" '
                         f'style="width:{size}px;height:{size}px;object-fit:contain;"/>')
@@ -173,12 +201,15 @@ def _asset_inner(assets_dir, rel):
         return None
 
 
-def _nested_art(assets_dir, rel, x, y, size, ring_color, label="?"):
+def _nested_art(assets_dir, rel, x, y, size, ring_color, label="?", url_mode="file"):
     """Place asset artwork on the stage; falls back to a ringed token."""
     try:
         path = _local_file(assets_dir, rel or "")
         if path and path.lower().endswith(".png"):
-            url = _file_url(path)
+            if url_mode == "http":
+                url = _http_asset_path(assets_dir, rel or "")
+            else:
+                url = _file_url(path)
             if url:
                 return (f'<image href="{_esc(url)}" x="{x}" y="{y}" '
                         f'width="{size}" height="{size}" preserveAspectRatio="xMidYMid meet"/>')
@@ -238,21 +269,152 @@ def _bar(hp, max_hp, width=120):
             f'<div style="font-size:11px;color:{SLATE};">{_esc(hp)}/{_esc(max_hp)}</div>')
 
 
-class GameViewer:
-    """Writes viewer.html every turn; browser auto-refreshes. Never raises."""
+class _ViewerHandler(BaseHTTPRequestHandler):
+    """Serves shell, state.json and /assets/* from the owning GameViewer. Never raises."""
 
-    def __init__(self, assets_dir=None, refresh=2, path=""):
+    def log_message(self, *args):  # quiet: turn loop already logs
+        pass
+
+    def do_GET(self):
+        try:
+            viewer = getattr(self.server, "viewer", None)
+            if viewer is None:
+                self._send(500, b"no viewer", "text/plain")
+                return
+            parsed = urllib.parse.urlparse(self.path)
+            route = parsed.path or "/"
+            if route in ("/", "/index.html"):
+                body = viewer.shell_html().encode("utf-8")
+                self._send(200, body, "text/html; charset=utf-8", no_store=True)
+                return
+            if route in ("/state.json", "/state"):
+                body = viewer.state_json().encode("utf-8")
+                self._send(200, body, "application/json", no_store=True)
+                return
+            if route.startswith("/assets/"):
+                rel = urllib.parse.unquote(route[len("/assets/"):])
+                self._serve_asset(viewer, rel)
+                return
+            self._send(404, b"not found", "text/plain")
+        except Exception:
+            try:
+                self._send(500, b"error", "text/plain")
+            except Exception:
+                pass
+
+    def _send(self, code, body, ctype, no_store=False):
+        self.send_response(code)
+        self.send_header("Content-Type", ctype)
+        self.send_header("Content-Length", str(len(body)))
+        if no_store:
+            self.send_header("Cache-Control", "no-store")
+        else:
+            self.send_header("Cache-Control", "public, max-age=3600")
+        self.end_headers()
+        self.wfile.write(body)
+
+    def _serve_asset(self, viewer, rel):
+        try:
+            if not rel or ".." in rel.split("/") or rel.startswith("/"):
+                self._send(404, b"not found", "text/plain")
+                return
+            base = os.path.abspath(viewer.assets_dir or "")
+            if not base:
+                self._send(404, b"not found", "text/plain")
+                return
+            full = os.path.abspath(os.path.join(base, *rel.split("/")))
+            if not full.startswith(base) or not os.path.isfile(full):
+                self._send(404, b"not found", "text/plain")
+                return
+            ctype, _ = mimetypes.guess_type(full)
+            with open(full, "rb") as f:
+                body = f.read()
+            self._send(200, body, ctype or "application/octet-stream")
+        except Exception:
+            try:
+                self._send(404, b"not found", "text/plain")
+            except Exception:
+                pass
+
+
+class GameViewer:
+    """Serves a live HUD on 127.0.0.1 with in-place updates. Never raises."""
+
+    def __init__(self, assets_dir=None, refresh=1, path="", port=0):
         self.assets_dir = assets_dir
-        self.refresh = max(0, int(refresh or 0))
+        try:
+            self.refresh = max(0.0, float(refresh or 0))
+        except Exception:
+            self.refresh = 1.0
+        if self.refresh and self.refresh < 0.5:
+            self.refresh = 0.5
         try:
             self.path = os.path.abspath(path) if path else os.path.join(
                 tempfile.gettempdir(), "airealms-viewer.html")
         except Exception:
             self.path = os.path.join(tempfile.gettempdir(), "airealms-viewer.html")
+        try:
+            root, ext = os.path.splitext(self.path)
+            self.state_path = root + "-state.json"
+        except Exception:
+            self.state_path = self.path + ".json"
         self._opened = False
+        self._lock = threading.Lock()
+        self._state = self._build_state(0, {}, {}, "", "", [], "starting")
+        self._server = None
+        self._thread = None
+        self.port = 0
+        try:
+            self._requested_port = int(port or 0)
+        except Exception:
+            self._requested_port = 0
+        self.start_server()
+
+    # -- server ----------------------------------------------------------
+    def start_server(self):
+        """Bind 127.0.0.1 (ephemeral port when 0). Never raises."""
+        if self._server is not None:
+            return
+        try:
+            srv = ThreadingHTTPServer(("127.0.0.1", self._requested_port), _ViewerHandler)
+            srv.viewer = self
+            srv.daemon_threads = True
+            self._server = srv
+            try:
+                self.port = srv.server_address[1]
+            except Exception:
+                self.port = 0
+            th = threading.Thread(target=srv.serve_forever, kwargs={"poll_interval": 0.2})
+            th.daemon = True
+            self._thread = th
+            th.start()
+        except Exception:
+            self._server = None
+            self._thread = None
+            self.port = 0
+
+    def stop(self):
+        """Shut the local server down. Never raises."""
+        try:
+            if self._server is not None:
+                self._server.shutdown()
+                self._server.server_close()
+        except Exception:
+            pass
+        self._server = None
+        self._thread = None
+
+    @property
+    def url(self):
+        try:
+            if self._server is not None and self.port:
+                return f"http://127.0.0.1:{self.port}/"
+        except Exception:
+            pass
+        return ""
 
     def open(self):
-        """Pop the browser once. Honors AIREALMS_NO_BROWSER=1. Never raises."""
+        """Pop the browser once (server URL preferred, file fallback). Never raises."""
         if self._opened:
             return
         self._opened = True
@@ -260,22 +422,62 @@ class GameViewer:
             if os.getenv("AIREALMS_NO_BROWSER", "").lower() in ("1", "true", "yes", "on"):
                 return
             import webbrowser
-            webbrowser.open(f"file:///{self.path.replace(os.sep, '/')}")
+            target = self.url
+            if not target:
+                target = f"file:///{self.path.replace(os.sep, '/')}"
+            webbrowser.open(target)
         except Exception:
             pass
 
     def update(self, turn=0, me=None, here=None, action_desc="",
                result_narrative="", log=None, status="playing"):
-        """Render one frame. All args optional; never raises."""
+        """Publish one frame: memory + state.json + file snapshot. Never raises."""
         try:
-            page = self._render(turn, me or {}, here or {},
-                                action_desc, result_narrative, log or [], status)
-            tmp = self.path + ".tmp"
-            with open(tmp, "w", encoding="utf-8", newline="\n") as f:
-                f.write(page)
-            os.replace(tmp, self.path)
+            state = self._build_state(turn, me or {}, here or {},
+                                      action_desc, result_narrative, log or [], status)
+            with self._lock:
+                self._state = state
+            # Sidecar for debugging / headless runs.
+            try:
+                tmp = self.state_path + ".tmp"
+                with open(tmp, "w", encoding="utf-8", newline="\n") as f:
+                    json.dump(state, f)
+                os.replace(tmp, self.state_path)
+            except Exception:
+                pass
+            # File snapshot keeps the legacy meta-refresh fallback when the
+            # local server cannot bind (browser opened on file://).
+            try:
+                page = self._render(turn, me or {}, here or {},
+                                    action_desc, result_narrative, log or [], status)
+                tmp = self.path + ".tmp"
+                with open(tmp, "w", encoding="utf-8", newline="\n") as f:
+                    f.write(page)
+                os.replace(tmp, self.path)
+            except Exception:
+                pass
         except Exception:
             pass
+
+    def state_json(self):
+        """Current state payload as JSON. Never raises."""
+        try:
+            with self._lock:
+                state = dict(self._state)
+            return json.dumps(state)
+        except Exception:
+            return "{}"
+
+    def shell_html(self):
+        """Static shell served once; JS patches it via state.json. Never raises."""
+        try:
+            poll = self.refresh if self.refresh else 0
+            poll_js = "0" if not poll else repr(float(poll))
+            with self._lock:
+                initial = dict(self._state)
+            return self._render_shell(initial, poll_js)
+        except Exception:
+            return "<html><body>viewer unavailable</body></html>"
 
     # -- stage ---------------------------------------------------------
     def background_url(self, loc_id):
@@ -287,6 +489,270 @@ class GameViewer:
             return _file_url(path) if os.path.exists(path) else ""
         except Exception:
             return ""
+
+    def background_http_path(self, loc_id):
+        """/assets/... path of the Blender-rendered backdrop, or '' when missing."""
+        try:
+            if not (self.assets_dir and loc_id):
+                return ""
+            rel = f"backgrounds/{loc_id}.png"
+            return _http_asset_path(self.assets_dir, rel)
+        except Exception:
+            return ""
+
+    @staticmethod
+    def _split(me_raw, here_raw):
+        try:
+            me = me_raw.get("data", me_raw) if isinstance(me_raw, dict) else {}
+            world = here_raw.get("data", here_raw) if isinstance(here_raw, dict) else {}
+            if not isinstance(me, dict):
+                me, world = {}, {}
+            if not isinstance(world, dict):
+                world = {}
+            return me, world
+        except Exception:
+            return {}, {}
+
+    def _pack_html(self, me, url_mode="file"):
+        try:
+            inv = [i for i in (me.get("inventory", []) or []) if isinstance(i, dict)][:10]
+            rows = []
+            for i in inv:
+                art = _svg_or_emoji(self.assets_dir,
+                                    i.get("asset") or _expected("item", i.get("item_id", "")),
+                                    "?", size=32, url_mode=url_mode)
+                star = " ⭐" if i.get("equipped") else ""
+                rows.append(
+                    f'<div style="display:flex;gap:8px;align-items:center;padding:3px 0;">{art}'
+                    f'<span style="color:{PARCHMENT};font-size:13px;">{_esc(i.get("name", "?"))} '
+                    f'x{_esc(i.get("qty", 1))}{star}</span></div>')
+            return "".join(rows) if rows else f'<div style="color:{SLATE};">Empty pack.</div>'
+        except Exception:
+            return f'<div style="color:{SLATE};">Empty pack.</div>'
+
+    def _quests_html(self, me):
+        try:
+            quests = [q for q in (me.get("active_quests", []) or []) if isinstance(q, dict)][:6]
+            return "".join(
+                f'<div style="padding:3px 0;font-size:13px;color:{PARCHMENT};">'
+                f'⚔ {_esc(q.get("title", "?"))} — {_esc(q.get("progress", "?"))}</div>'
+                for q in quests) or f'<div style="color:{SLATE};">No active quests.</div>'
+        except Exception:
+            return f'<div style="color:{SLATE};">No active quests.</div>'
+
+    def _exits_html(self, world):
+        try:
+            exits = [e.get("to", "?") for e in (world.get("exits", []) or []) if isinstance(e, dict)]
+            return " ".join(
+                f'<span style="background:{PANEL};border:1px solid {GOLD};color:{GOLD};'
+                f'border-radius:12px;padding:2px 10px;margin:2px;font-size:12px;">{_esc(e)}</span>'
+                for e in exits) or f'<span style="color:{SLATE};">no exits</span>'
+        except Exception:
+            return f'<span style="color:{SLATE};">no exits</span>'
+
+    def _build_state(self, turn, me_raw, here_raw, action_desc, result_narrative, log, status):
+        """JSON-serializable frame for state.json + live patching. Never raises."""
+        try:
+            me, world = self._split(me_raw, here_raw)
+            loc_id = world.get("location_id") or me.get("location", "?")
+            loc_type = world.get("type")
+            if loc_type not in ("town", "wild", "dungeon"):
+                loc_type = LOCATION_TYPE.get(loc_id)
+            baseline = BASELINE.get(loc_id, DEFAULT_BASELINE)
+            backdrop = self.background_http_path(loc_id)
+            tokens = self._tokens_svg(me, world, loc_id, loc_type, baseline, "http")
+            terrain = ""
+            if not backdrop:
+                try:
+                    terrain = (f'<svg viewBox="0 0 {STAGE_W} {STAGE_H}" '
+                               f'style="width:100%;height:100%;display:block;">'
+                               f'{self._terrain_svg(loc_id, loc_type, baseline)}</svg>')
+                except Exception:
+                    terrain = ""
+            try:
+                log_list = [str(e) for e in list(log or [])[-12:]]
+            except Exception:
+                log_list = []
+            return {
+                "turn": turn, "status": status or "playing",
+                "name": me.get("name", "?"), "level": me.get("level", "?"),
+                "hp": me.get("hp", "?"), "max_hp": me.get("max_hp", "?"),
+                "gold": me.get("gold", "?"), "kills": me.get("kills", "?"),
+                "loc_id": loc_id, "loc_type": loc_type or "?",
+                "backdrop": backdrop, "tokens_svg": tokens, "terrain_svg": terrain,
+                "description": world.get("description", "") or "",
+                "exits_html": self._exits_html(world),
+                "pack_html": self._pack_html(me, "http"),
+                "quests_html": self._quests_html(me),
+                "action_desc": action_desc or "", "result_narrative": result_narrative or "",
+                "log": log_list, "dead": status == "dead",
+            }
+        except Exception:
+            return {"turn": turn or 0, "status": "playing", "log": []}
+
+    def _render_shell(self, initial, poll_js):
+        """Static shell: backdrop double-buffer crossfades, tokens/HUD patch in place."""
+        try:
+            init = initial or {}
+            backdrop = init.get("backdrop", "") or ""
+            tokens = init.get("tokens_svg", "") or ""
+            terrain = init.get("terrain_svg", "") or ""
+            name = _esc(init.get("name", "?"))
+            polling_note = (f"live · polls every {self.refresh:g}s" if self.refresh
+                            else "paused · refresh with ?poll=0")
+            return (
+                "<!DOCTYPE html><html><head><meta charset='utf-8'>"
+                f"<title>AI Realms — {name} (live)</title>"
+                "<style>"
+                "html{background:#12141C;}"
+                ".bg-layer{position:absolute;inset:0;width:100%;height:100%;"
+                "object-fit:cover;transition:opacity .45s ease;}"
+                ".bg-visible{opacity:1;}.bg-hidden{opacity:0;}"
+                ".hpwrap{background:#0B0D13;border:1px solid #2C3244;border-radius:4px;"
+                "width:120px;height:10px;}"
+                "#hpfill{height:8px;border-radius:3px;transition:width .6s ease,background .6s ease;}"
+                "#tokens{transition:opacity .25s ease;}"
+                "</style></head>"
+                f'<body style="background:{INK};color:{PARCHMENT};font-family:system-ui,sans-serif;margin:0;">'
+                f'<div id="banner" style="display:none;background:{BLOOD};color:#fff;'
+                'text-align:center;padding:8px;font-weight:bold;">'
+                '☠ YOU DIED — see the CLI debrief ☠</div>'
+                f'<div style="padding:12px 16px;border-bottom:1px solid #2C3244;display:flex;'
+                'gap:16px;align-items:center;flex-wrap:wrap;">'
+                '<div style="font-family:Georgia,serif;font-size:22px;">⚔ AI Realms</div>'
+                f'<div style="font-size:20px;"><span id="hname">{name}</span> '
+                f'<span style="color:{GOLD};">Lv <span id="hlevel">{_esc(init.get("level", "?"))}</span></span></div>'
+                '<div><div class="hpwrap"><div id="hpfill" style="width:0"></div></div>'
+                f'<div id="hptext" style="font-size:11px;color:{SLATE};">?</div></div>'
+                f'<div>🪙 <span id="hgold">{_esc(init.get("gold", "?"))}</span> gold</div>'
+                f'<div>💀 <span id="hkills">{_esc(init.get("kills", "?"))}</span> kills</div>'
+                f'<div id="hmeta" style="color:{SLATE};">turn {_esc(init.get("turn", 0))} · '
+                f'{_esc(init.get("status", "playing"))}</div>'
+                f'<div style="color:{SLATE};font-size:12px;" id="hpoll">{_esc(polling_note)}</div>'
+                '</div>'
+                '<div style="padding:12px 16px 0;">'
+                f'<div style="background:{PANEL};border:1px solid #2C3244;border-radius:10px;padding:12px;">'
+                '<div id="stage" style="position:relative;border-radius:10px;overflow:hidden;aspect-ratio:16/9;'
+                f'background:{INK};">'
+                f'<img id="bgA" class="bg-layer bg-visible" alt="" src="{_esc(backdrop)}"'
+                f' style="display:{ "block" if backdrop else "none"};"/>'
+                '<img id="bgB" class="bg-layer bg-hidden" alt="" src="" style="display:block;"/>'
+                f'<div id="terrain" style="position:absolute;inset:0;">{terrain}</div>'
+                f'<svg id="tokens" viewBox="0 0 {STAGE_W} {STAGE_H}" preserveAspectRatio="xMidYMid meet" '
+                'style="position:absolute;inset:0;width:100%;height:100%;">' + tokens + '</svg>'
+                '</div>'
+                f'<div id="hdesc" style="font-size:13px;color:{SLATE};margin-top:8px;">'
+                f'{_esc(init.get("description", ""))}</div>'
+                f'<div id="hexits" style="margin-top:6px;">{init.get("exits_html", "")}</div>'
+                '</div></div>'
+                '<div style="display:flex;gap:12px;padding:12px 16px;flex-wrap:wrap;">'
+                f'<div style="flex:1;min-width:240px;background:{PANEL};border:1px solid #2C3244;'
+                'border-radius:10px;padding:12px;">'
+                f'<div style="font-size:12px;color:{SLATE};">PACK</div>'
+                f'<div id="hpack">{init.get("pack_html", "")}</div>'
+                f'<div style="font-size:12px;color:{SLATE};margin-top:8px;">QUESTS</div>'
+                f'<div id="hquests">{init.get("quests_html", "")}</div>'
+                '</div>'
+                f'<div style="flex:2;min-width:300px;background:{PANEL};border:1px solid #2C3244;'
+                'border-radius:10px;padding:12px;">'
+                f'<div style="font-size:12px;color:{SLATE};">LAST ACTION</div>'
+                f'<div id="hact" style="font-size:13px;">{_esc(init.get("action_desc", "") or "—")}</div>'
+                f'<div id="hres" style="font-size:13px;color:{VERDIGRIS};">'
+                f'{_esc(init.get("result_narrative", ""))}</div>'
+                f'<div style="font-size:12px;color:{SLATE};margin-top:8px;">ADVENTURE LOG</div>'
+                '<div id="hlog"></div>'
+                '</div></div>'
+                '<script>'
+                f'const POLL_S = {poll_js};'
+                'let lastTurn = ' + repr(int(init.get("turn", 0) or 0)) + ';'
+                'let showingA = true;'
+                'const $ = (id) => document.getElementById(id);'
+                'function hpColor(hp, mx){'
+                '  try{ const p = Number(hp)/Number(mx||1);'
+                '    if(p>0.5) return "' + VERDIGRIS + '";'
+                '    if(p>0.25) return "' + GOLD + '";'
+                '    return "' + BLOOD + '";'
+                '  }catch(e){ return "' + SLATE + '"; } }'
+                'function setBackdrop(url){'
+                '  const front = showingA ? $("bgA") : $("bgB");'
+                '  const back = showingA ? $("bgB") : $("bgA");'
+                '  const cur = front.getAttribute("src") || "";'
+                '  if((url||"") === cur && front.style.display !== "none") return;'
+                '  if(!url){ front.style.display = "none"; $("terrain").style.display = "block"; return; }'
+                '  const pre = new Image();'
+                '  pre.onload = () => {'
+                '    back.src = url; back.style.display = "block";'
+                '    back.classList.remove("bg-hidden"); back.classList.add("bg-visible");'
+                '    front.classList.remove("bg-visible"); front.classList.add("bg-hidden");'
+                '    showingA = !showingA; $("terrain").style.display = "none"; };'
+                '  pre.onerror = () => { front.style.display = "none"; $("terrain").style.display = "block"; };'
+                '  pre.src = url; }'
+                'function applyState(s){'
+                '  if(!s || typeof s !== "object") return;'
+                '  if(typeof s.turn === "number" && s.turn === lastTurn) return;'
+                '  if(typeof s.turn === "number") lastTurn = s.turn;'
+                '  try{ document.title = "AI Realms — " + (s.name||"?") + " @ " + (s.loc_id||"?"); }catch(e){}'
+                '  try{ $("hname").textContent = s.name ?? "?"; }catch(e){}'
+                '  try{ $("hlevel").textContent = s.level ?? "?"; }catch(e){}'
+                '  try{ $("hgold").textContent = s.gold ?? "?"; }catch(e){}'
+                '  try{ $("hkills").textContent = s.kills ?? "?"; }catch(e){}'
+                '  try{ $("hmeta").textContent = "turn " + (s.turn ?? "?") + " · " + (s.status || ""); }catch(e){}'
+                '  try{'
+                '    const hp = Number(s.hp), mx = Number(s.max_hp);'
+                '    if(isFinite(hp) && isFinite(mx) && mx > 0){'
+                '      const pct = Math.max(0, Math.min(1, hp/mx));'
+                '      const fill = $("hpfill");'
+                '      fill.style.width = Math.round(pct*100) + "%";'
+                '      fill.style.background = hpColor(hp, mx);'
+                '      $("hptext").textContent = s.hp + "/" + s.max_hp;'
+                '    } else { $("hptext").textContent = (s.hp ?? "?") + "/" + (s.max_hp ?? "?"); }'
+                '  }catch(e){}'
+                '  try{ setBackdrop(s.backdrop || ""); }catch(e){}'
+                '  try{'
+                '    if(s.backdrop){ $("terrain").style.display = "none"; }'
+                '    else if(s.terrain_svg){ $("terrain").innerHTML = s.terrain_svg;'
+                '      $("terrain").style.display = "block"; }'
+                '  }catch(e){}'
+                '  try{'
+                '    const tok = $("tokens");'
+                '    if(typeof s.tokens_svg === "string"){'
+                '      tok.style.opacity = "0";'
+                '      requestAnimationFrame(() => { tok.innerHTML = s.tokens_svg; tok.style.opacity = "1"; });'
+                '    }'
+                '  }catch(e){}'
+                '  try{ $("hdesc").textContent = s.description || ""; }catch(e){}'
+                '  try{ if(typeof s.exits_html === "string") $("hexits").innerHTML = s.exits_html; }catch(e){}'
+                '  try{ if(typeof s.pack_html === "string") $("hpack").innerHTML = s.pack_html; }catch(e){}'
+                '  try{ if(typeof s.quests_html === "string") $("hquests").innerHTML = s.quests_html; }catch(e){}'
+                '  try{ $("hact").textContent = s.action_desc || "—"; }catch(e){}'
+                '  try{ $("hres").textContent = s.result_narrative || ""; }catch(e){}'
+                '  try{'
+                '    const log = Array.isArray(s.log) ? s.log.slice(-12).reverse() : [];'
+                '    $("hlog").innerHTML = log.length ? log.map((e) => '
+                '      `<div style="padding:4px 0;border-bottom:1px solid #2C3244;font-size:13px;">${String(e).replace(/&/g,"&amp;").replace(/</g,"&lt;")}</div>`'
+                '    ).join("") : `<div style="color:${SLATE};">Log is empty.</div>`;'
+                '  }catch(e){}'
+                '  try{ $("banner").style.display = s.dead ? "block" : "none"; }catch(e){}'
+                '}'
+                'async function poll(){'
+                '  try{ const r = await fetch("state.json?since=" + lastTurn, {cache:"no-store"});'
+                '    if(r.ok){ applyState(await r.json()); }'
+                '  }catch(e){}'
+                '}'
+                'try{'
+                '  const initLog = ' + json.dumps(list((init.get("log") or []))[-12:][::-1]).replace("</", "<\\/") + ';'
+                '  if(Array.isArray(initLog)){'
+                '    $("hlog").innerHTML = initLog.length ? initLog.map((e) => '
+                '      `<div style="padding:4px 0;border-bottom:1px solid #2C3244;font-size:13px;">${String(e).replace(/&/g,"&amp;").replace(/</g,"&lt;")}</div>`'
+                '    ).join("") : ""; }'
+                '  $("banner").style.display = ' + ("true" if init.get("dead") else "false") + ' ? "block" : "none";'
+                '  if(' + repr(bool(backdrop)) + '){ $("terrain").style.display = "none"; }'
+                '}catch(e){}'
+                'if(POLL_S > 0){ setInterval(poll, Math.max(500, POLL_S*1000)); poll(); }'
+                '</script></body></html>'
+            )
+        except Exception:
+            return "<html><body>viewer unavailable</body></html>"
 
     def _terrain_svg(self, loc_id, loc_type, baseline):
         """Drawn backdrop (used when there is no Blender background PNG)."""
@@ -334,7 +800,7 @@ class GameViewer:
         return (f'<ellipse cx="{cx}" cy="{feet_y + 4}" rx="{w / 2}" ry="7" '
                 f'fill="#000000" opacity="0.35"/>')
 
-    def _tokens_svg(self, me, world, loc_id, loc_type, baseline):
+    def _tokens_svg(self, me, world, loc_id, loc_type, baseline, url_mode="file"):
         """Character, monsters, loot, NPCs and labels, in stage coordinates."""
         ad = self.assets_dir
         decor = DECOR.get(loc_type, SLATE)
@@ -352,7 +818,7 @@ class GameViewer:
             x, y = self._place(cx, npc_y, NPC_SIZE)
             parts.append(self._shadow(cx, npc_y, NPC_SIZE * 0.55))
             parts.append(_nested_art(ad, n.get("asset") or _expected("npc", n.get("npc_id", "")),
-                                     x, y, NPC_SIZE, VERDIGRIS, n.get("name", "?")))
+                                     x, y, NPC_SIZE, VERDIGRIS, n.get("name", "?"), url_mode))
             parts.append(f'<text x="{cx}" y="{y - 8}" text-anchor="middle" font-size="13" '
                          f'fill="{PARCHMENT}">{_esc(n.get("name", "?"))}</text>')
 
@@ -370,7 +836,7 @@ class GameViewer:
                               me.get("hp", 0), me.get("max_hp", 0)))
         parts.append(self._shadow(cx, player_feet, psize * 0.5))
         parts.append(_nested_art(ad, me.get("asset") or _expected("player", "fighting" if fighting else "standing"),
-                                 px, py, psize, GOLD, name))
+                                 px, py, psize, GOLD, name, url_mode))
 
         # Monsters: front row, feet on their ground line, size by species.
         mons = [m for m in (world.get("monsters", []) or []) if isinstance(m, dict)]
@@ -387,7 +853,7 @@ class GameViewer:
             parts.append(_svg_bar(cxm - 40, ym - 30, 80, m.get("hp", 0), m.get("max_hp", 0)))
             parts.append(self._shadow(cxm, monster_feet, size * 0.6))
             parts.append(_nested_art(ad, m.get("asset") or _expected("monster", mname),
-                                     xm, ym, size, BLOOD, mname))
+                                     xm, ym, size, BLOOD, mname, url_mode))
             if (m.get("drops") or {}).get("name"):
                 parts.append(f'<circle cx="{xm + size - 6}" cy="{ym + 10}" r="7" fill="{GOLD}">'
                              f'<title>{_esc(m["drops"]["name"])}</title></circle>')
@@ -405,7 +871,7 @@ class GameViewer:
             xg, yg = self._place(cxg, loot_y, LOOT_SIZE, 0.1)
             parts.append(self._shadow(cxg, loot_y, LOOT_SIZE * 0.7))
             parts.append(_nested_art(ad, g.get("asset") or _expected("item", g.get("item_id", "")),
-                                     xg, yg, LOOT_SIZE, GOLD, g.get("name", "?")))
+                                     xg, yg, LOOT_SIZE, GOLD, g.get("name", "?"), url_mode))
             qty = f' x{g.get("qty", 1)}' if g.get("qty", 1) != 1 else ""
             parts.append(f'<text x="{cxg}" y="{yg - 6}" text-anchor="middle" font-size="12" '
                          f'fill="{GOLD}">{_esc(g.get("name", "?"))}{_esc(qty)}</text>')

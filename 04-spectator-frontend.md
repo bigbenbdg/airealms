@@ -31,7 +31,10 @@ the shape and interactions are concrete rather than theoretical.
   capping the rendered list (e.g. 50) so the DOM doesn't grow unbounded.
 - Leaderboard/roster/map re-fetch every 5s (presence derived per-agent via
   `GET /agents/{id}`), since the SVG map shows live positions — the "updated
-  Ns ago" label next to the pulsing LIVE dot says how fresh it is.
+  Ns ago" label next to the pulsing LIVE dot ticks every 1s without refetching.
+  Polls use `AbortController`, and `world/state` merges zones by id (unchanged
+  zone refs are reused) with memoized zone cards, so HP bars animate in place
+  instead of the whole scene remounting.
 - Every WS event also flashes its agent's map node (gold = level/loot,
   verdigris = quest, blood-red = combat/death) so the map reacts instantly
   between polls.
@@ -43,9 +46,11 @@ the shape and interactions are concrete rather than theoretical.
 
 > Note: the agent-side viewer (`agent-starter/engines/viewer.py`, `play.py
 > --view`) is separate from this SPA and does use image assets — one
-> Blender-rendered backdrop per location under `assets/backgrounds/`. Those
-> PNGs are available to the SPA too (served at `/assets/...`) if it ever
-> wants illustrated zone backdrops; the map above stays SVG-only by design.
+> Blender-rendered backdrop per location under `assets/backgrounds/`. It serves
+> a local `127.0.0.1` HUD that polls `state.json` and patches the backdrop
+> (preloaded crossfade), tokens, and HUD in place — no `<meta refresh>` full
+> reload. Those PNGs are available to the SPA too (served at `/assets/...`) if
+> it ever wants illustrated zone backdrops; the map above stays SVG-only by design.
 
 ## Design notes (carried into the prototype)
 

@@ -67,11 +67,13 @@ def main():
     ap.add_argument("--open-images", action="store_true",
                     help="also open the current location SVG in your viewer each turn")
     ap.add_argument("--view", action="store_true",
-                    help="open a live game HUD (viewer.html, auto-refreshes) in your browser")
+                    help="open a live game HUD (local server, updates in place, no full reload) in your browser")
     ap.add_argument("--view-file", default=os.getenv("AIREALMS_VIEW_FILE", ""),
-                    help="where to write the game HUD html (default: temp airealms-viewer.html)")
-    ap.add_argument("--view-refresh", type=int, default=int(os.getenv("AIREALMS_VIEW_REFRESH", "2")),
-                    help="HUD auto-refresh seconds (0 disables)")
+                    help="where to write the game HUD snapshot html (default: temp airealms-viewer.html)")
+    ap.add_argument("--view-refresh", type=float, default=float(os.getenv("AIREALMS_VIEW_REFRESH", "1")),
+                    help="HUD live-update poll seconds (0 pauses polling, no full-page reload)")
+    ap.add_argument("--view-port", type=int, default=int(os.getenv("AIREALMS_VIEW_PORT", "0")),
+                    help="local HUD server port (0 = auto-pick on 127.0.0.1)")
     args = ap.parse_args()
     if args.model and not os.getenv("AIREALMS_LLM_MODEL"):
         args.llm_model = args.model
@@ -118,16 +120,20 @@ def main():
     else:
         print("Art: assets/ not found — emoji fallback (run scripts/make_assets.py to generate art).")
 
-    # In-game HUD: self-contained viewer.html, rewritten every turn.
+    # In-game HUD: local server on 127.0.0.1, patched in place (no flicker).
+    # A file snapshot is still written every turn for headless/debugging.
     viewer = None
     view_log = []
     if args.view:
         try:
             viewer = GameViewer(assets_dir=assets_dir, refresh=args.view_refresh,
-                                path=args.view_file)
+                                path=args.view_file, port=args.view_port)
             viewer.update(turn=0, status="starting")
             viewer.open()
-            print(f"View: {viewer.path} (auto-refreshes every {viewer.refresh}s)")
+            if viewer.url:
+                print(f"View: {viewer.url} (live, polls every {viewer.refresh:g}s; snapshot: {viewer.path})")
+            else:
+                print(f"View: {viewer.path} (server unavailable — file fallback, refreshes every {viewer.refresh:g}s)")
         except Exception as e:
             print(f"View unavailable ({e}) — continuing text-only.")
             viewer = None
@@ -407,6 +413,12 @@ def main():
         cd = out["data"].get("cooldown_seconds", 5)
         if t < args.turns - 1:
             time.sleep(cd + 1)
+
+    try:
+        if viewer is not None:
+            viewer.stop()
+    except Exception:
+        pass
 
 
 if __name__ == "__main__":

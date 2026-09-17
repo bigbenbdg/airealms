@@ -1,6 +1,7 @@
 // AI Realms spectator: Chronicle / Leaderboard / World map / Battlefield / Roster.
-// Reads ONLY public endpoints (see 02-api-spec.md). Live events via WS, board/map/state poll 5s.
-import React, { useState, useEffect, useRef, useCallback } from "react";
+// Reads ONLY public endpoints (see 02-api-spec.md). Live events via WS;
+// board/state poll 5s with in-place merge (no full scene remount), 1s ticker only for "ago" labels.
+import React, { useState, useEffect, useRef, useCallback, useMemo, memo } from "react";
 import {
   Sword, Shield, Map as MapIcon, Trophy, ScrollText, Skull,
   Heart, Coins, User, Radio, X, Sparkles,
@@ -36,6 +37,28 @@ function locName(id, locations) {
   return locations.find((l) => l.id === id)?.name ?? id;
 }
 
+// Reuse unchanged zone object refs so memoized ZoneCards skip re-render and
+// SVG CSS animations (roads, halos, bobbing dots) don't restart on every poll.
+function mergeBattle(prev, next) {
+  try {
+    const pz = (prev && prev.zones) || [];
+    const nz = (next && next.zones) || [];
+    if (pz.length !== nz.length) return next;
+    const byPrev = new Map(pz.map((z) => [z.id, z]));
+    let changed = false;
+    const zones = nz.map((z) => {
+      const old = byPrev.get(z.id);
+      if (old && JSON.stringify(old) === JSON.stringify(z)) return old;
+      changed = true;
+      return z;
+    });
+    if (!changed) return prev;
+    return { ...next, zones };
+  } catch {
+    return next;
+  }
+}
+
 export default function App() {
   const [tab, setTab] = useState("chronicle");
   const [events, setEvents] = useState([]);
@@ -48,14 +71,16 @@ export default function App() {
   const [presence, setPresence] = useState({}); // location_id -> count (derived from board profiles)
   const [locAgents, setLocAgents] = useState({}); // location_id -> [{agent_id,name,level}]
   const [lastUpdate, setLastUpdate] = useState(null);
+  const [now, setNow] = useState(Date.now()); // 1s ticker for "updated Xs ago" only
   const [flash, setFlash] = useState(null); // {loc, color, key} — event hit-marker on the map
   const locByName = useRef({});
   const [selected, setSelected] = useState(null);
   const [error, setError] = useState("");
 
-  const loadBoard = useCallback(async (s) => {
+  const loadBoard = useCallback(async (s, signal) => {
     try {
-      const d = await api.leaderboard(s);
+      const d = await api.leaderboard(s, signal);
+      if (signal && signal.aborted) return;
       setBoard(d.leaderboard || []);
       // Derive presence: fetch each agent profile for location (cheap at this scale).
       const counts = {};
@@ -64,7 +89,7 @@ export default function App() {
       await Promise.all(
         (d.leaderboard || []).slice(0, 30).map(async (row) => {
           try {
-            const p = await api.agent(row.agent_id);
+            const p = await api.agent(row.agent_id, signal);
             if (p.location_public) {
               counts[p.location_public] = (counts[p.location_public] || 0) + 1;
               (byLoc[p.location_public] = byLoc[p.location_public] || []).push(
@@ -74,40 +99,66 @@ export default function App() {
           } catch { /* ignore */ }
         })
       );
+      if (signal && signal.aborted) return;
       setPresence(counts);
       setLocAgents(byLoc);
       locByName.current = byName;
       setLastUpdate(Date.now());
-    } catch (e) { setError(String(e.message || e)); }
+    } catch (e) {
+      if (e && (e.name === "AbortError" || /abort/i.test(String(e.message || "")))) return;
+      setError(String(e.message || e));
+    }
   }, []);
 
-  const loadEvents = useCallback(async () => {
+  const loadEvents = useCallback(async (signal) => {
     try {
-      const d = await api.events(24);
+      const d = await api.events(24, "", signal);
+      if (signal && signal.aborted) return;
       setEvents((d.events || []).slice().reverse());
       setCursor(d.next_cursor || "");
-    } catch (e) { setError(String(e.message || e)); }
+    } catch (e) {
+      if (e && (e.name === "AbortError" || /abort/i.test(String(e.message || "")))) return;
+      setError(String(e.message || e));
+    }
   }, []);
 
-  const loadMap = useCallback(async () => {
+  const loadMap = useCallback(async (signal) => {
     try {
-      const d = await api.map();
+      const d = await api.map(signal);
+      if (signal && signal.aborted) return;
       setMap(d);
-    } catch (e) { setError(String(e.message || e)); }
+    } catch (e) {
+      if (e && (e.name === "AbortError" || /abort/i.test(String(e.message || "")))) return;
+      setError(String(e.message || e));
+    }
   }, []);
 
-  const loadState = useCallback(async () => {
+  const loadState = useCallback(async (signal) => {
     try {
-      const d = await api.state();
-      setBattle(d);
-    } catch (e) { setError(String(e.message || e)); }
+      const d = await api.state(signal);
+      if (signal && signal.aborted) return;
+      setBattle((prev) => mergeBattle(prev, d));
+      setLastUpdate(Date.now());
+    } catch (e) {
+      if (e && (e.name === "AbortError" || /abort/i.test(String(e.message || "")))) return;
+      setError(String(e.message || e));
+    }
   }, []);
 
   useEffect(() => {
-    loadEvents(); loadMap(); loadBoard(sort); loadState();
-    const iv = setInterval(() => { loadBoard(sort); loadState(); }, 5000);
-    return () => clearInterval(iv);
+    const ctl = new AbortController();
+    loadEvents(); loadMap(ctl.signal); loadBoard(sort, ctl.signal); loadState(ctl.signal);
+    const iv = setInterval(() => {
+      if (ctl.signal.aborted) return;
+      loadBoard(sort, ctl.signal); loadState(ctl.signal);
+    }, 5000);
+    return () => { clearInterval(iv); ctl.abort(); };
   }, [sort]); // eslint-disable-line
+
+  useEffect(() => {
+    const tick = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(tick);
+  }, []);
 
   useEffect(() => {
     let ws;
@@ -144,8 +195,8 @@ export default function App() {
         <div className="flex-1 p-5">
           {tab === "chronicle" && <Chronicle events={events} onSelectName={openAgent} board={board} />}
           {tab === "leaderboard" && <Leaderboard rows={board} sort={sort} setSort={setSort} onSelect={openAgent} locations={map.locations} />}
-          {tab === "map" && <WorldMap map={map} presence={presence} locAgents={locAgents} flash={flash} onSelect={openAgent} lastUpdate={lastUpdate} />}
-          {tab === "battlefield" && <Battlefield battle={battle} flash={flash} lastUpdate={lastUpdate} onAgent={openAgent} onFocus={(f) => { setSelected(null); setFocus(f); }} />}
+          {tab === "map" && <WorldMap map={map} presence={presence} locAgents={locAgents} flash={flash} onSelect={openAgent} lastUpdate={lastUpdate} now={now} />}
+          {tab === "battlefield" && <Battlefield battle={battle} flash={flash} lastUpdate={lastUpdate} now={now} onAgent={openAgent} onFocus={(f) => { setSelected(null); setFocus(f); }} />}
           {tab === "roster" && <Roster rows={board} onSelect={openAgent} locations={map.locations} />}
         </div>
         {selected && <AgentPanel agent={selected} onClose={() => setSelected(null)} locations={map.locations} />}
@@ -312,19 +363,27 @@ function levelColor(level) {
   return level >= 8 ? GOLD : level >= 5 ? PARCHMENT : SLATE;
 }
 
-function WorldMap({ map, presence, locAgents, flash, onSelect, lastUpdate }) {
-  const locs = (map.locations || []).map((l, i) => ({ ...l, ...(LAYOUT[l.id] || { x: 60 + i * 100, y: 160 }) }));
-  const byId = Object.fromEntries(locs.map((l) => [l.id, l]));
-  const ago = lastUpdate ? Math.max(0, Math.round((Date.now() - lastUpdate) / 1000)) : null;
+function WorldMap({ map, presence, locAgents, flash, onSelect, lastUpdate, now }) {
+  const locs = useMemo(
+    () => (map.locations || []).map((l, i) => ({ ...l, ...(LAYOUT[l.id] || { x: 60 + i * 100, y: 160 }) })),
+    [map.locations]
+  );
+  const byId = useMemo(() => Object.fromEntries(locs.map((l) => [l.id, l])), [locs]);
+  const tick = now || Date.now();
+  const ago = lastUpdate ? Math.max(0, Math.round((tick - lastUpdate) / 1000)) : null;
 
-  const edgeGeom = (e) => {
-    const f = byId[e.from]; const t = byId[e.to];
-    if (!f || !t) return null;
-    const dx = t.x - f.x, dy = t.y - f.y;
-    const len = Math.hypot(dx, dy) || 1;
-    const trim = 30 / len;
-    return { x1: f.x + dx * trim, y1: f.y + dy * trim, x2: t.x - dx * trim, y2: t.y - dy * trim };
-  };
+  const edgeGeom = useMemo(() => {
+    const m = {};
+    for (const e of map.edges || []) {
+      const f = byId[e.from]; const t = byId[e.to];
+      if (!f || !t) continue;
+      const dx = t.x - f.x, dy = t.y - f.y;
+      const len = Math.hypot(dx, dy) || 1;
+      const trim = 30 / len;
+      m[`${e.from}->${e.to}`] = { x1: f.x + dx * trim, y1: f.y + dy * trim, x2: t.x - dx * trim, y2: t.y - dy * trim };
+    }
+    return m;
+  }, [byId, map.edges]);
 
   return (
     <div>
@@ -352,10 +411,10 @@ function WorldMap({ map, presence, locAgents, flash, onSelect, lastUpdate }) {
         <rect x="0" y="0" width="600" height="340" fill="url(#mapdots)" opacity="0.5" />
 
         {(map.edges || []).map((e, i) => {
-          const g = edgeGeom(e);
+          const g = edgeGeom[`${e.from}->${e.to}`];
           if (!g) return null;
           return (
-            <g key={i}>
+            <g key={`${e.from}->${e.to}`}>
               <line {...g} stroke={HAIRLINE} strokeWidth={2} />
               <line {...g} stroke={SLATE} strokeWidth={1.2} strokeDasharray="5 6" opacity="0.65"
                 className="road-dash" markerEnd="url(#roadarrow)" />
@@ -436,11 +495,15 @@ function HpBar({ x, y, w, hp, maxHp, h = 6 }) {
   );
 }
 
-function Battlefield({ battle, flash, lastUpdate, onAgent, onFocus }) {
+function Battlefield({ battle, flash, lastUpdate, now, onAgent, onFocus }) {
   const zones = battle.zones || [];
-  const ago = lastUpdate ? Math.max(0, Math.round((Date.now() - lastUpdate) / 1000)) : null;
-  const units = zones.reduce((n, z) => n + z.agents.length + z.monsters.length, 0);
-  const loot = zones.reduce((n, z) => n + z.loot.length, 0);
+  const tick = now || Date.now();
+  const ago = lastUpdate ? Math.max(0, Math.round((tick - lastUpdate) / 1000)) : null;
+  const units = useMemo(
+    () => zones.reduce((n, z) => n + z.agents.length + z.monsters.length, 0),
+    [zones]
+  );
+  const loot = useMemo(() => zones.reduce((n, z) => n + z.loot.length, 0), [zones]);
   return (
     <div>
       <div className="flex items-center gap-2" style={{ marginBottom: 6 }}>
@@ -464,7 +527,7 @@ function Battlefield({ battle, flash, lastUpdate, onAgent, onFocus }) {
   );
 }
 
-function ZoneCard({ zone, flash, onAgent, onFocus }) {
+const ZoneCard = memo(function ZoneCard({ zone, flash, onAgent, onFocus }) {
   const tint = zone.type === "dungeon" ? "#1A1218" : zone.type === "wild" ? "#16241F" : "#1E2436";
   const edge = zone.type === "dungeon" ? BLOOD : zone.type === "wild" ? VERDIGRIS : GOLD;
   const isFlash = flash && flash.loc === zone.id;
@@ -564,7 +627,7 @@ function ZoneCard({ zone, flash, onAgent, onFocus }) {
       </div>
     </div>
   );
-}
+});
 
 function FocusPanel({ focus, onClose }) {
   const closeBtn = (
