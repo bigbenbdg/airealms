@@ -360,7 +360,9 @@ class GameViewer:
             self.state_path = self.path + ".json"
         self._opened = False
         self._lock = threading.Lock()
+        self._seq = 0
         self._state = self._build_state(0, {}, {}, "", "", [], "starting")
+        self._state["seq"] = 0
         self._server = None
         self._thread = None
         self.port = 0
@@ -436,6 +438,8 @@ class GameViewer:
             state = self._build_state(turn, me or {}, here or {},
                                       action_desc, result_narrative, log or [], status)
             with self._lock:
+                self._seq += 1
+                state["seq"] = self._seq
                 self._state = state
             # Sidecar for debugging / headless runs.
             try:
@@ -573,8 +577,12 @@ class GameViewer:
                 log_list = [str(e) for e in list(log or [])[-12:]]
             except Exception:
                 log_list = []
+            try:
+                dead = status == "dead" or me.get("alive") is False
+            except Exception:
+                dead = status == "dead"
             return {
-                "turn": turn, "status": status or "playing",
+                "turn": turn, "seq": 0, "status": status or "playing",
                 "name": me.get("name", "?"), "level": me.get("level", "?"),
                 "hp": me.get("hp", "?"), "max_hp": me.get("max_hp", "?"),
                 "gold": me.get("gold", "?"), "kills": me.get("kills", "?"),
@@ -585,10 +593,10 @@ class GameViewer:
                 "pack_html": self._pack_html(me, "http"),
                 "quests_html": self._quests_html(me),
                 "action_desc": action_desc or "", "result_narrative": result_narrative or "",
-                "log": log_list, "dead": status == "dead",
+                "log": log_list, "dead": dead,
             }
         except Exception:
-            return {"turn": turn or 0, "status": "playing", "log": []}
+            return {"turn": turn or 0, "seq": 0, "status": "playing", "log": []}
 
     def _render_shell(self, initial, poll_js):
         """Static shell: backdrop double-buffer crossfades, tokens/HUD patch in place."""
@@ -665,6 +673,8 @@ class GameViewer:
                 '<script>'
                 f'const POLL_S = {poll_js};'
                 'let lastTurn = ' + repr(int(init.get("turn", 0) or 0)) + ';'
+                'let lastSeq = ' + repr(int(init.get("seq", 0) or 0)) + ';'
+                'let lastTokens = null;'
                 'let showingA = true;'
                 'const $ = (id) => document.getElementById(id);'
                 'function hpColor(hp, mx){'
@@ -689,7 +699,8 @@ class GameViewer:
                 '  pre.src = url; }'
                 'function applyState(s){'
                 '  if(!s || typeof s !== "object") return;'
-                '  if(typeof s.turn === "number" && s.turn === lastTurn) return;'
+                '  if(typeof s.seq === "number"){ if(s.seq === lastSeq) return; lastSeq = s.seq; }'
+                '  else if(typeof s.turn === "number" && s.turn === lastTurn) return;'
                 '  if(typeof s.turn === "number") lastTurn = s.turn;'
                 '  try{ document.title = "AI Realms — " + (s.name||"?") + " @ " + (s.loc_id||"?"); }catch(e){}'
                 '  try{ $("hname").textContent = s.name ?? "?"; }catch(e){}'
@@ -715,7 +726,8 @@ class GameViewer:
                 '  }catch(e){}'
                 '  try{'
                 '    const tok = $("tokens");'
-                '    if(typeof s.tokens_svg === "string"){'
+                '    if(typeof s.tokens_svg === "string" && s.tokens_svg !== lastTokens){'
+                '      lastTokens = s.tokens_svg;'
                 '      tok.style.opacity = "0";'
                 '      requestAnimationFrame(() => { tok.innerHTML = s.tokens_svg; tok.style.opacity = "1"; });'
                 '    }'
@@ -730,7 +742,7 @@ class GameViewer:
                 '    const log = Array.isArray(s.log) ? s.log.slice(-12).reverse() : [];'
                 '    $("hlog").innerHTML = log.length ? log.map((e) => '
                 '      `<div style="padding:4px 0;border-bottom:1px solid #2C3244;font-size:13px;">${String(e).replace(/&/g,"&amp;").replace(/</g,"&lt;")}</div>`'
-                '    ).join("") : `<div style="color:${SLATE};">Log is empty.</div>`;'
+                '    ).join("") : `<div style="color:' + SLATE + ';">Log is empty.</div>`;'
                 '  }catch(e){}'
                 '  try{ $("banner").style.display = s.dead ? "block" : "none"; }catch(e){}'
                 '}'

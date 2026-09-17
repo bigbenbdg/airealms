@@ -81,6 +81,8 @@ def _move_toward(target, world, zones=None):
                         dq.append(nb)
             if target in prev:
                 step = target
+                if step == cur:
+                    return None  # already here; caller falls through
                 while prev[step] != cur:
                     step = prev[step]
                 if step in exits:

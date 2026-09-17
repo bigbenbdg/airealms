@@ -369,8 +369,61 @@ def main():
         show(f"SERVER POST /actions {choice[0]} (turn {t+1})", out)
         vlog(f"turn {t+1} result: {out.get('narrative', '')}")
         if viewer:
-            viewer.update(t + 1, st, here, last_action_desc,
-                          out.get("narrative", ""), view_log)
+            # The action outcome (HP, gold, level, inventory, location) lives
+            # in out["data"]["player"]; st/here are pre-action. Merge the
+            # snapshot in and patch the visible world from the result so the
+            # HUD shows fresh HP / monster HP / location immediately instead
+            # of a turn late. No extra request here: the API allows 5 reqs
+            # per 5s window and short-cooldown turns already use 3.
+            try:
+                out_data = out.get("data", {}) or {}
+                snap = out_data.get("player", {}) or {}
+                me_live = dict(st.get("data", {}) or {})
+                for k in ("level", "xp", "xp_to_next_level", "hp", "max_hp",
+                          "gold", "attack", "defense", "combat", "kills",
+                          "quests_completed", "location", "alive", "inventory",
+                          "equipped", "cooldown_seconds_remaining"):
+                    if snap.get(k) is not None:
+                        me_live[k] = snap[k]
+                if isinstance(out_data.get("active_quests"), list):
+                    me_live["active_quests"] = out_data["active_quests"]
+                here_live = here
+                try:
+                    hw = here.get("data", {}) or {}
+                    mons = hw.get("monsters")
+                    tid = (choice[1] or {}).get("target_id")
+                    trem = out_data.get("target_hp_remaining")
+                    if isinstance(mons, list) and tid and isinstance(trem, (int, float)):
+                        patched = []
+                        for m in mons:
+                            if isinstance(m, dict) and m.get("monster_id") == tid:
+                                if out_data.get("result") == "kill" or trem <= 0:
+                                    continue  # server lists live monsters only
+                                m = dict(m)
+                                m["hp"] = trem
+                            patched.append(m)
+                        hw2 = dict(hw)
+                        hw2["monsters"] = patched
+                        here_live = {"data": hw2}
+                except Exception:
+                    here_live = here
+                # Location changed (move/flee): the whole world is new, so one
+                # fresh /world/here is worth it — those cooldowns (10s/5s)
+                # clear the 5s rate window before the next turn.
+                new_loc = out_data.get("location")
+                if new_loc and new_loc != me.get("location"):
+                    try:
+                        here_live = req("GET", f"{args.base}/world/here", api_key=key)
+                    except Exception:
+                        pass
+                viewer.update(t + 1, {"data": me_live}, here_live, last_action_desc,
+                              out.get("narrative", ""), view_log)
+            except Exception:
+                try:
+                    viewer.update(t + 1, st, here, last_action_desc,
+                                  out.get("narrative", ""), view_log)
+                except Exception:
+                    pass
         if show_art:
             try:
                 for line in game_assets.loot_lines(out, assets_dir):
