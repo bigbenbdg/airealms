@@ -74,7 +74,7 @@ STAGE_LAYOUT = {
                       "monster_x0": 630, "zoom": 1.15, "zoom_x": 0.55,
                       "zoom_y": 0.76},
     "ember_ridge": {"npc_y": 485, "player_feet": 505, "monster_feet": 495,
-                    "loot_y": 515, "player_x": 230, "npc_x0": 440,
+                    "loot_y": 515, "player_x": 230, "npc_x0": 330,
                     "monster_x0": 610, "zoom": 1.15, "zoom_x": 0.50,
                     "zoom_y": 0.80},
 }
@@ -1018,7 +1018,7 @@ class GameViewer:
             cxm = clamp_cx(m_x0 + slot * (i + 0.5) if shown else m_x0, size)
             xm, ym = self._place(cxm, monster_feet, size, pad, flot)
             lx, ly = vis(cxm, ym)
-            lab.append(f'<text x="{lx}" y="{ly - 36}" text-anchor="middle" '
+            lab.append(f'<text x="{lx}" y="{max(ly - 10, 44)}" text-anchor="middle" '
                        f'font-size="13" fill="{PARCHMENT}" {_halo(2.5)}>{_esc(mname)}</text>')
             # HP bar down at the monster's feet so it never rides above the
             # scene for tall sprites (troll, drake).
