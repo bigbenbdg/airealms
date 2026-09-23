@@ -913,10 +913,6 @@ class GameViewer:
         y = feet_y - size + size * pad - float_px
         return cx - size / 2, y
 
-    def _shadow(self, cx, feet_y, w):
-        return (f'<ellipse cx="{cx}" cy="{feet_y + 4}" rx="{w / 2}" ry="7" '
-                f'fill="#000000" opacity="0.35"/>')
-
     def _zoom(self, loc_id):
         """(zoom, zoom_x, zoom_y) for a map: how much to scale the backdrop and
         where the anchor sits (0-1 fractions of the stage). Never raises."""
@@ -970,7 +966,6 @@ class GameViewer:
         for i, n in enumerate(npcs):
             cx = clamp_cx(lay["npc_x0"] + i * 165, NPC_SIZE)
             x, y = self._place(cx, npc_y, NPC_SIZE)
-            spr.append(self._shadow(cx, npc_y, NPC_SIZE * 0.55))
             spr.append(_nested_art(ad, n.get("asset") or _expected("npc", n.get("npc_id", "")),
                                    x, y, NPC_SIZE, VERDIGRIS, n.get("name", "?"), url_mode))
             lx, ly = vis(cx, y)
@@ -991,7 +986,6 @@ class GameViewer:
                    f'{_esc(name)} · Lv {_esc(me.get("level", "?"))}</text>')
         lab.append(_svg_bar(lx - 50, ly - 32, 100,
                             me.get("hp", 0), me.get("max_hp", 0)))
-        spr.append(self._shadow(cx, player_feet, psize * 0.5))
         spr.append(_nested_art(ad, me.get("asset") or _expected("player", "fighting" if fighting else "standing"),
                                px, py, psize, GOLD, name, url_mode))
 
@@ -1022,7 +1016,6 @@ class GameViewer:
             lab.append(f'<text x="{lx}" y="{ly - 36}" text-anchor="middle" '
                        f'font-size="13" fill="{PARCHMENT}" {_halo(2.5)}>{_esc(mname)}</text>')
             lab.append(_svg_bar(lx - 40, ly - 30, 80, m.get("hp", 0), m.get("max_hp", 0)))
-            spr.append(self._shadow(cxm, monster_feet, size * 0.6))
             spr.append(_nested_art(ad, m.get("asset") or _expected("monster", mname),
                                    xm, ym, size, BLOOD, mname, url_mode))
             if (m.get("drops") or {}).get("name"):
