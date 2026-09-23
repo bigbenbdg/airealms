@@ -159,6 +159,14 @@ def _esc(value):
         return "?"
 
 
+def _pretty_loc(loc_id):
+    """ember_ridge -> Ember Ridge: underscores become spaces, title case."""
+    try:
+        return str(loc_id).replace("_", " ").strip().title() or "?"
+    except Exception:
+        return "?"
+
+
 def _file_url(path):
     """file:/// URL for an absolute path (Windows-safe)."""
     try:
@@ -679,6 +687,7 @@ class GameViewer:
                 "hp": me.get("hp", "?"), "max_hp": me.get("max_hp", "?"),
                 "gold": me.get("gold", "?"), "kills": me.get("kills", "?"),
                 "loc_id": loc_id, "loc_type": loc_type or "?",
+                "loc_name": _pretty_loc(loc_id),
                 "backdrop": backdrop, "tokens_svg": tokens, "labels_svg": labels,
                 "terrain_svg": terrain,
                 "tokens_viewbox": vb, "zoom": zoom,
@@ -811,7 +820,7 @@ class GameViewer:
                 '  if(typeof s.seq === "number"){ if(s.seq === lastSeq) return; lastSeq = s.seq; }'
                 '  else if(typeof s.turn === "number" && s.turn === lastTurn) return;'
                 '  if(typeof s.turn === "number") lastTurn = s.turn;'
-                '  try{ document.title = "AI Realms — " + (s.name||"?") + " @ " + (s.loc_id||"?"); }catch(e){}'
+                '  try{ document.title = "AI Realms — " + (s.name||"?") + " @ " + (s.loc_name || s.loc_id || "?"); }catch(e){}'
                 '  try{ $("hname").textContent = s.name ?? "?"; }catch(e){}'
                 '  try{ $("hlevel").textContent = s.level ?? "?"; }catch(e){}'
                 '  try{ $("hgold").textContent = s.gold ?? "?"; }catch(e){}'
@@ -1055,8 +1064,12 @@ class GameViewer:
                        f'fill="{GOLD}" {_halo(2.5)}>{_esc(g.get("name", "?"))}{_esc(qty)}</text>')
 
         # Caption: fixed screen positions (HUD-like), unaffected by zoom.
-        lab.append(f'<text x="16" y="34" font-size="24" fill="{PARCHMENT}" '
-                   f'font-family="Georgia,serif" {_halo(4)}>{_esc(loc_id)}</text>')
+        # Medieval fantasy styling: small-caps serif with letter spacing.
+        lab.append(f'<text x="16" y="36" font-size="27" fill="{PARCHMENT}" '
+                   f'font-family="Georgia, \'Palatino Linotype\', \'Book Antiqua\', '
+                   f'\'Times New Roman\', serif" font-variant="small-caps" '
+                   f'letter-spacing="2.5" font-weight="bold" {_halo(4)}>'
+                   f'{_esc(_pretty_loc(loc_id))}</text>')
         lab.append(f'<text x="{STAGE_W - 16}" y="34" font-size="13" fill="{decor}" '
                    f'text-anchor="end" {_halo(2.5)}>{_esc(loc_type or "?")}</text>')
         return "".join(spr), "".join(lab)
@@ -1159,7 +1172,7 @@ class GameViewer:
                       f'padding:8px;font-weight:bold;">☠ YOU DIED — see the CLI debrief ☠</div>')
 
         return ("<!DOCTYPE html><html><head><meta charset='utf-8'>" + refresh_tag +
-                f"<title>AI Realms — {_esc(name)} @ {_esc(loc_id)}</title></head>"
+                f"<title>AI Realms — {_esc(name)} @ {_esc(_pretty_loc(loc_id))}</title></head>"
                 f'<body style="background:{INK};color:{PARCHMENT};font-family:system-ui,sans-serif;margin:0;">'
                 + banner +
                 f'<div style="padding:12px 16px;border-bottom:1px solid #2C3244;display:flex;'
