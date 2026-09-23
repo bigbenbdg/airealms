@@ -54,48 +54,49 @@ STAGE_W, STAGE_H = 960, 540
 # marsh water, ridge lava lake).
 STAGE_LAYOUT = {
     "riverside_village": {"npc_y": 400, "player_feet": 470, "monster_feet": 460,
-                          "loot_y": 488, "player_x": 150, "npc_x0": 300,
-                          "monster_x0": 600, "zoom": 1.28, "zoom_x": 0.50,
+                          "loot_y": 488, "player_x": 230, "npc_x0": 440,
+                          "monster_x0": 590, "zoom": 1.15, "zoom_x": 0.50,
                           "zoom_y": 0.78},
     "oakhollow_forest": {"npc_y": 395, "player_feet": 470, "monster_feet": 461,
-                         "loot_y": 488, "player_x": 150, "npc_x0": 420,
-                         "monster_x0": 600, "zoom": 1.22, "zoom_x": 0.50,
+                         "loot_y": 488, "player_x": 230, "npc_x0": 430,
+                         "monster_x0": 590, "zoom": 1.15, "zoom_x": 0.50,
                          "zoom_y": 0.74},
     "capital_city": {"npc_y": 440, "player_feet": 475, "monster_feet": 465,
-                     "loot_y": 490, "player_x": 150, "npc_x0": 300,
-                     "monster_x0": 680, "zoom": 1.30, "zoom_x": 0.50,
+                     "loot_y": 490, "player_x": 230, "npc_x0": 440,
+                     "monster_x0": 640, "zoom": 1.15, "zoom_x": 0.50,
                      "zoom_y": 0.80},
     "deep_cave": {"npc_y": 410, "player_feet": 470, "monster_feet": 465,
-                  "loot_y": 488, "player_x": 170, "npc_x0": 400,
-                  "monster_x0": 620, "zoom": 1.25, "zoom_x": 0.50,
+                  "loot_y": 488, "player_x": 240, "npc_x0": 410,
+                  "monster_x0": 610, "zoom": 1.15, "zoom_x": 0.50,
                   "zoom_y": 0.76},
     "sunken_marsh": {"npc_y": 400, "player_feet": 475, "monster_feet": 450,
-                      "loot_y": 492, "player_x": 150, "npc_x0": 450,
-                      "monster_x0": 660, "zoom": 1.26, "zoom_x": 0.55,
+                      "loot_y": 492, "player_x": 230, "npc_x0": 450,
+                      "monster_x0": 630, "zoom": 1.15, "zoom_x": 0.55,
                       "zoom_y": 0.76},
     "ember_ridge": {"npc_y": 460, "player_feet": 475, "monster_feet": 465,
-                    "loot_y": 490, "player_x": 150, "npc_x0": 350,
-                    "monster_x0": 620, "zoom": 1.28, "zoom_x": 0.50,
+                    "loot_y": 490, "player_x": 230, "npc_x0": 440,
+                    "monster_x0": 610, "zoom": 1.15, "zoom_x": 0.50,
                     "zoom_y": 0.80},
 }
 DEFAULT_LAYOUT = {"npc_y": 420, "player_feet": 472, "monster_feet": 462,
-                  "loot_y": 488, "player_x": 150, "npc_x0": 350,
-                  "monster_x0": 600, "zoom": 1.20, "zoom_x": 0.50,
+                  "loot_y": 488, "player_x": 230, "npc_x0": 440,
+                  "monster_x0": 600, "zoom": 1.15, "zoom_x": 0.50,
                   "zoom_y": 0.75}
 # Backwards-compatible ground line (front-row feet) per location.
 BASELINE = {loc: v["player_feet"] for loc, v in STAGE_LAYOUT.items()}
 DEFAULT_BASELINE = DEFAULT_LAYOUT["player_feet"]
 
-# Sprite box sizes (square <image> box, px in stage space). Humans ~1.8m =
-# 150 front / 115 back (perspective); monsters scale with HP/body mass so a
-# Giant Rat reads small next to an Ember Drake. Measured content boxes in
-# Blender (alpha bbox) confirm visual hierarchy after padding compensation.
-PLAYER_SIZE_FIGHT, PLAYER_SIZE_STAND, NPC_SIZE, LOOT_SIZE = 150, 140, 115, 42
+# Sprite box sizes (square <image> box, px in stage space). The player reads
+# at least half the scene height (>=270px of 540 on screen after zoom);
+# monsters scale with HP/body mass so a Giant Rat reads small next to an
+# Ember Drake. NPC back row sits between. Backdrop zoom stays gentle so the
+# scene keeps its natural proportions — size comes from the boxes here.
+PLAYER_SIZE_FIGHT, PLAYER_SIZE_STAND, NPC_SIZE, LOOT_SIZE = 240, 230, 180, 50
 MONSTER_SIZE = {
-    "Giant Rat": 70, "Forest Wolf": 85, "Road Bandit": 140,
-    "Marsh Wraith": 150, "Cave Troll": 190, "Ember Drake": 205,
+    "Giant Rat": 100, "Forest Wolf": 125, "Road Bandit": 205,
+    "Marsh Wraith": 220, "Cave Troll": 275, "Ember Drake": 300,
 }
-DEFAULT_MONSTER_SIZE = 110
+DEFAULT_MONSTER_SIZE = 160
 # Bottom transparent padding fraction per sprite. Sprites are cropped to
 # their alpha-content box (see SPRITE_VIEWBOX), so the *visible* feet reach
 # the image edge and only a tiny nudge keeps them on the ground line.
@@ -945,18 +946,24 @@ class GameViewer:
         monster_feet = lay["monster_feet"]
         loot_y = lay["loot_y"]
         zoom, _, _ = self._zoom(loc_id)
-        vx, vy, _, _ = self._zoom_viewbox(loc_id)
+        vx, vy, vw, _ = self._zoom_viewbox(loc_id)
+        vis_left, vis_right = vx, vx + vw
 
         def vis(x, y):
             """Stage point -> screen point on the (unscaled) labels layer."""
             return (x - vx) * zoom, (y - vy) * zoom
 
+        def clamp_cx(cx, size):
+            """Keep a sprite box inside the visible crop."""
+            half = size / 2
+            return min(max(cx, vis_left + half + 8), vis_right - half - 8)
+
         spr, lab = [], []
 
-        # NPCs: back row, human scale with perspective (~0.77x player).
+        # NPCs: back row, human scale with perspective (~0.7x player).
         npcs = [n for n in (world.get("npcs", []) or []) if isinstance(n, dict)][:4]
         for i, n in enumerate(npcs):
-            cx = lay["npc_x0"] + i * 120
+            cx = clamp_cx(lay["npc_x0"] + i * 165, NPC_SIZE)
             x, y = self._place(cx, npc_y, NPC_SIZE)
             spr.append(self._shadow(cx, npc_y, NPC_SIZE * 0.55))
             spr.append(_nested_art(ad, n.get("asset") or _expected("npc", n.get("npc_id", "")),
@@ -968,9 +975,9 @@ class GameViewer:
         # The character, front row: fighting stance in combat, relaxed pose
         # when no monsters are around.
         name = me.get("name", "?") if isinstance(me, dict) else "?"
-        cx = lay["player_x"]
         fighting = bool([m for m in (world.get("monsters", []) or []) if isinstance(m, dict)])
         psize = PLAYER_SIZE_FIGHT if fighting else PLAYER_SIZE_STAND
+        cx = clamp_cx(lay["player_x"], psize)
         ppad = FOOT_PAD.get("player" if fighting else "player_standing", DEFAULT_FOOT_PAD)
         px, py = self._place(cx, player_feet, psize, ppad)
         lx, ly = vis(cx, py)
@@ -991,7 +998,7 @@ class GameViewer:
             size = MONSTER_SIZE.get(mname, DEFAULT_MONSTER_SIZE)
             pad = FOOT_PAD.get(mname, DEFAULT_FOOT_PAD)
             flot = WRAITH_FLOAT if mname == "Marsh Wraith" else 0
-            cxm = lay["monster_x0"] + i * (size + 45)
+            cxm = clamp_cx(lay["monster_x0"] + i * (size + 30), size)
             xm, ym = self._place(cxm, monster_feet, size, pad, flot)
             lx, ly = vis(cxm, ym)
             lab.append(f'<text x="{lx}" y="{ly - 36}" text-anchor="middle" '
@@ -1015,7 +1022,7 @@ class GameViewer:
         # Loot lying on the ground line.
         loot = [g for g in (world.get("items_on_ground", []) or []) if isinstance(g, dict)][:4]
         for i, g in enumerate(loot):
-            cxg = 330 + i * 90
+            cxg = clamp_cx(420 + i * 95, LOOT_SIZE)
             xg, yg = self._place(cxg, loot_y, LOOT_SIZE, 0.1)
             spr.append(self._shadow(cxg, loot_y, LOOT_SIZE * 0.7))
             spr.append(_nested_art(ad, g.get("asset") or _expected("item", g.get("item_id", "")),
