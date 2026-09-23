@@ -92,13 +92,17 @@ DEFAULT_BASELINE = DEFAULT_LAYOUT["player_feet"]
 # Ember Drake. NPC back row sits between. Backdrop zoom stays gentle so the
 # scene keeps its natural proportions — size comes from the boxes here.
 PLAYER_SIZE_FIGHT, PLAYER_SIZE_STAND, NPC_SIZE, LOOT_SIZE = 240, 230, 180, 50
+# Per-NPC box overrides: Warden Cassia stands as tall as the main character.
+NPC_SIZE_OVERRIDE = {"npc_warden": 240}
 # Monster boxes target ~80% of the player's visible height (~190px vs the
 # player's ~240px): visible height = size * min(bw,bh)/max(bw,bh) after the
 # SPRITE_VIEWBOX crop, so wide sprites (rat, wolf) get bigger boxes than tall
 # ones (wraith) to land on the same height.
 MONSTER_SIZE = {
+    # Box sizes chosen for visible height (size * min(bw,bh)/max(bw,bh)):
+    # troll/drake ~2x the base 190px monster height, wraith 1.5x.
     "Giant Rat": 232, "Forest Wolf": 255, "Road Bandit": 205,
-    "Marsh Wraith": 190, "Cave Troll": 212, "Ember Drake": 225,
+    "Marsh Wraith": 285, "Cave Troll": 422, "Ember Drake": 448,
 }
 DEFAULT_MONSTER_SIZE = 220
 # Bottom transparent padding fraction per sprite. Sprites are cropped to
@@ -964,10 +968,11 @@ class GameViewer:
         # NPCs: back row, human scale with perspective (~0.7x player).
         npcs = [n for n in (world.get("npcs", []) or []) if isinstance(n, dict)][:4]
         for i, n in enumerate(npcs):
-            cx = clamp_cx(lay["npc_x0"] + i * 165, NPC_SIZE)
-            x, y = self._place(cx, npc_y, NPC_SIZE)
+            nsize = NPC_SIZE_OVERRIDE.get(n.get("npc_id", ""), NPC_SIZE)
+            cx = clamp_cx(lay["npc_x0"] + i * 165, nsize)
+            x, y = self._place(cx, npc_y, nsize)
             spr.append(_nested_art(ad, n.get("asset") or _expected("npc", n.get("npc_id", "")),
-                                   x, y, NPC_SIZE, VERDIGRIS, n.get("name", "?"), url_mode))
+                                   x, y, nsize, VERDIGRIS, n.get("name", "?"), url_mode))
             lx, ly = vis(cx, y)
             lab.append(f'<text x="{lx}" y="{ly - 8}" text-anchor="middle" font-size="13" '
                        f'fill="{PARCHMENT}" {_halo(2.5)}>{_esc(n.get("name", "?"))}</text>')
