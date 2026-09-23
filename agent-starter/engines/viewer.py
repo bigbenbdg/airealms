@@ -891,7 +891,7 @@ class GameViewer:
                 '  else if(typeof s.turn === "number" && s.turn === lastTurn) return;'
                 '  if(typeof s.turn === "number") lastTurn = s.turn;'
                 '  try{ document.title = "AI Realms — " + (s.name||"?") + " @ " + (s.loc_name || s.loc_id || "?"); }catch(e){}'
-                '  try{ if(Number(s.turn) > 0 && s.loc_id && s.loc_id !== "?") dismissTitle(); }catch(e){}'
+                '  try{ if(Number(s.turn) > 0) dismissTitle(); }catch(e){}'
                 '  try{ $("hname").textContent = s.name ?? "?"; }catch(e){}'
                 '  try{ $("hlevel").textContent = s.level ?? "?"; }catch(e){}'
                 '  try{ $("hgold").textContent = s.gold ?? "?"; }catch(e){}'
