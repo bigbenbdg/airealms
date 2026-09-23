@@ -55,26 +55,33 @@ STAGE_W, STAGE_H = 960, 540
 STAGE_LAYOUT = {
     "riverside_village": {"npc_y": 400, "player_feet": 470, "monster_feet": 460,
                           "loot_y": 488, "player_x": 150, "npc_x0": 300,
-                          "monster_x0": 600},
+                          "monster_x0": 600, "zoom": 1.28, "zoom_x": 0.50,
+                          "zoom_y": 0.78},
     "oakhollow_forest": {"npc_y": 395, "player_feet": 470, "monster_feet": 461,
                          "loot_y": 488, "player_x": 150, "npc_x0": 420,
-                         "monster_x0": 600},
+                         "monster_x0": 600, "zoom": 1.22, "zoom_x": 0.50,
+                         "zoom_y": 0.74},
     "capital_city": {"npc_y": 440, "player_feet": 475, "monster_feet": 465,
                      "loot_y": 490, "player_x": 150, "npc_x0": 300,
-                     "monster_x0": 680},
+                     "monster_x0": 680, "zoom": 1.30, "zoom_x": 0.50,
+                     "zoom_y": 0.80},
     "deep_cave": {"npc_y": 410, "player_feet": 470, "monster_feet": 465,
                   "loot_y": 488, "player_x": 170, "npc_x0": 400,
-                  "monster_x0": 620},
+                  "monster_x0": 620, "zoom": 1.25, "zoom_x": 0.50,
+                  "zoom_y": 0.76},
     "sunken_marsh": {"npc_y": 400, "player_feet": 475, "monster_feet": 450,
                       "loot_y": 492, "player_x": 150, "npc_x0": 450,
-                      "monster_x0": 660},
+                      "monster_x0": 660, "zoom": 1.26, "zoom_x": 0.55,
+                      "zoom_y": 0.76},
     "ember_ridge": {"npc_y": 460, "player_feet": 475, "monster_feet": 465,
                     "loot_y": 490, "player_x": 150, "npc_x0": 350,
-                    "monster_x0": 620},
+                    "monster_x0": 620, "zoom": 1.28, "zoom_x": 0.50,
+                    "zoom_y": 0.80},
 }
 DEFAULT_LAYOUT = {"npc_y": 420, "player_feet": 472, "monster_feet": 462,
                   "loot_y": 488, "player_x": 150, "npc_x0": 350,
-                  "monster_x0": 600}
+                  "monster_x0": 600, "zoom": 1.20, "zoom_x": 0.50,
+                  "zoom_y": 0.75}
 # Backwards-compatible ground line (front-row feet) per location.
 BASELINE = {loc: v["player_feet"] for loc, v in STAGE_LAYOUT.items()}
 DEFAULT_BASELINE = DEFAULT_LAYOUT["player_feet"]
@@ -89,15 +96,42 @@ MONSTER_SIZE = {
     "Marsh Wraith": 150, "Cave Troll": 190, "Ember Drake": 205,
 }
 DEFAULT_MONSTER_SIZE = 110
-# Bottom transparent padding fraction per sprite (Blender alpha-bbox measure),
-# used so the *visible* feet — not the image edge — sit on the ground line.
+# Bottom transparent padding fraction per sprite. Sprites are cropped to
+# their alpha-content box (see SPRITE_VIEWBOX), so the *visible* feet reach
+# the image edge and only a tiny nudge keeps them on the ground line.
 FOOT_PAD = {
-    "player": 0.108, "player_standing": 0.086,
-    "Giant Rat": 0.149, "Forest Wolf": 0.165, "Road Bandit": 0.103,
-    "Marsh Wraith": 0.058, "Cave Troll": 0.07, "Ember Drake": 0.132,
+    "player": 0.012, "player_standing": 0.012,
+    "Giant Rat": 0.012, "Forest Wolf": 0.012, "Road Bandit": 0.012,
+    "Marsh Wraith": 0.012, "Cave Troll": 0.012, "Ember Drake": 0.012,
 }
-DEFAULT_FOOT_PAD = 0.07
+DEFAULT_FOOT_PAD = 0.012
 WRAITH_FLOAT = 14  # the wraith hovers instead of standing
+
+# Alpha-content box (x, y, w, h) per sprite on its 2048x2048 canvas,
+# measured once with Pillow. Rendering through this viewBox crops away the
+# transparent padding so each figure fills its box (no per-sprite FOOT_PAD /
+# size hacks needed). Keys are "<dir>/<file>" so both "assets/x.png" and
+# "x.png" asset forms resolve. Sprites missing from here fall back to the
+# full 0 0 2048 2048 view.
+SPRITE_VIEWBOX = {
+    "player/player.png": (290, 262, 1532, 1564),
+    "player/player_standing.png": (502, 210, 764, 1670),
+    "monsters/cave_troll.png": (34, 150, 2000, 1800),
+    "monsters/ember_drake.png": (222, 290, 1754, 1488),
+    "monsters/forest_wolf.png": (238, 454, 1680, 1256),
+    "monsters/giant_rat.png": (68, 366, 1922, 1576),
+    "monsters/marsh_wraith.png": (458, 130, 1120, 1800),
+    "monsters/road_bandit.png": (190, 254, 1480, 1584),
+    "npcs/npc_armorer_sella.png": (264, 146, 1686, 1828),
+    "npcs/npc_blacksmith.png": (506, 314, 1332, 1560),
+    "npcs/npc_captain.png": (558, 134, 1352, 1808),
+    "npcs/npc_hermit.png": (386, 290, 1148, 1580),
+    "npcs/npc_innkeeper.png": (218, 210, 1740, 1756),
+    "npcs/npc_merchant.png": (314, 158, 1600, 1808),
+    "npcs/npc_scout.png": (378, 186, 1228, 1724),
+    "npcs/npc_warden.png": (242, 210, 1652, 1658),
+}
+DEFAULT_SPRITE_VIEWBOX = (0, 0, 2048, 2048)
 
 LOCATION_TYPE = {
     "riverside_village": "town", "capital_city": "town",
@@ -214,8 +248,22 @@ def _asset_inner(assets_dir, rel):
         return None
 
 
+def _sprite_viewbox(rel):
+    """Alpha-content (x, y, w, h) for an asset rel path, or the full canvas."""
+    try:
+        key = (rel or "").replace("\\", "/").replace("assets/", "")
+        if key.startswith("/"):
+            key = key[1:]
+        return SPRITE_VIEWBOX.get(key, DEFAULT_SPRITE_VIEWBOX)
+    except Exception:
+        return DEFAULT_SPRITE_VIEWBOX
+
+
 def _nested_art(assets_dir, rel, x, y, size, ring_color, label="?", url_mode="file"):
-    """Place asset artwork on the stage; falls back to a ringed token."""
+    """Place asset artwork on the stage; falls back to a ringed token.
+
+    PNG sprites render through their SPRITE_VIEWBOX content box so transparent
+    padding is cropped away and the figure fills the box."""
     try:
         path = _local_file(assets_dir, rel or "")
         if path and path.lower().endswith(".png"):
@@ -224,8 +272,12 @@ def _nested_art(assets_dir, rel, x, y, size, ring_color, label="?", url_mode="fi
             else:
                 url = _file_url(path)
             if url:
-                return (f'<image href="{_esc(url)}" x="{x}" y="{y}" '
-                        f'width="{size}" height="{size}" preserveAspectRatio="xMidYMid meet"/>')
+                bx, by, bw, bh = _sprite_viewbox(rel)
+                return (f'<svg x="{x}" y="{y}" width="{size}" height="{size}" '
+                        f'viewBox="{bx} {by} {bw} {bh}" '
+                        f'preserveAspectRatio="xMidYMid meet">'
+                        f'<image href="{_esc(url)}" x="0" y="0" '
+                        f'width="2048" height="2048"/></svg>')
         inner = _asset_inner(assets_dir, rel)
         if inner:
             return (f'<svg x="{x}" y="{y}" width="{size}" height="{size}" '
@@ -590,11 +642,13 @@ class GameViewer:
                 loc_type = LOCATION_TYPE.get(loc_id)
             baseline = BASELINE.get(loc_id, DEFAULT_BASELINE)
             backdrop = self.background_http_path(loc_id)
-            tokens = self._tokens_svg(me, world, loc_id, loc_type, baseline, "http")
+            zoom, zoom_x, zoom_y = self._zoom(loc_id)
+            vb = "%.2f %.2f %.2f %.2f" % self._zoom_viewbox(loc_id)
+            tokens, labels = self._tokens_svg(me, world, loc_id, loc_type, "http")
             terrain = ""
             if not backdrop:
                 try:
-                    terrain = (f'<svg viewBox="0 0 {STAGE_W} {STAGE_H}" '
+                    terrain = (f'<svg viewBox="{vb}" '
                                f'style="width:100%;height:100%;display:block;">'
                                f'{self._terrain_svg(loc_id, loc_type, baseline)}</svg>')
                 except Exception:
@@ -613,7 +667,10 @@ class GameViewer:
                 "hp": me.get("hp", "?"), "max_hp": me.get("max_hp", "?"),
                 "gold": me.get("gold", "?"), "kills": me.get("kills", "?"),
                 "loc_id": loc_id, "loc_type": loc_type or "?",
-                "backdrop": backdrop, "tokens_svg": tokens, "terrain_svg": terrain,
+                "backdrop": backdrop, "tokens_svg": tokens, "labels_svg": labels,
+                "terrain_svg": terrain,
+                "tokens_viewbox": vb, "zoom": zoom,
+                "zoom_x": zoom_x, "zoom_y": zoom_y,
                 "description": world.get("description", "") or "",
                 "exits_html": self._exits_html(world),
                 "pack_html": self._pack_html(me, "http"),
@@ -630,7 +687,15 @@ class GameViewer:
             init = initial or {}
             backdrop = init.get("backdrop", "") or ""
             tokens = init.get("tokens_svg", "") or ""
+            labels = init.get("labels_svg", "") or ""
             terrain = init.get("terrain_svg", "") or ""
+            tokens_viewbox = init.get("tokens_viewbox", "") or \
+                f"0 0 {STAGE_W} {STAGE_H}"
+            zoom = init.get("zoom", 1.0) or 1.0
+            zoom_x = init.get("zoom_x", 0.5) or 0.5
+            zoom_y = init.get("zoom_y", 0.75) or 0.75
+            bg_transform = (f"transform:scale({zoom:g});transform-origin:"
+                            f"{zoom_x * 100:g}% {zoom_y * 100:g}%;" if zoom > 1 else "")
             name = _esc(init.get("name", "?"))
             polling_note = (f"live · polls every {self.refresh:g}s" if self.refresh
                             else "paused · refresh with ?poll=0")
@@ -669,11 +734,13 @@ class GameViewer:
                 '<div id="stage" style="position:relative;border-radius:10px;overflow:hidden;aspect-ratio:16/9;'
                 f'background:{INK};">'
                 f'<img id="bgA" class="bg-layer bg-visible" alt="" src="{_esc(backdrop)}"'
-                f' style="display:{ "block" if backdrop else "none"};"/>'
+                f' style="display:{"block" if backdrop else "none"};{bg_transform}"/>'
                 '<img id="bgB" class="bg-layer bg-hidden" alt="" src="" style="display:block;"/>'
                 f'<div id="terrain" style="position:absolute;inset:0;">{terrain}</div>'
-                f'<svg id="tokens" viewBox="0 0 {STAGE_W} {STAGE_H}" preserveAspectRatio="xMidYMid meet" '
+                f'<svg id="tokens" viewBox="{_esc(tokens_viewbox)}" preserveAspectRatio="xMidYMid meet" '
                 'style="position:absolute;inset:0;width:100%;height:100%;">' + tokens + '</svg>'
+                f'<svg id="labels" viewBox="0 0 {STAGE_W} {STAGE_H}" preserveAspectRatio="xMidYMid meet" '
+                'style="position:absolute;inset:0;width:100%;height:100%;pointer-events:none;">' + labels + '</svg>'
                 '</div>'
                 f'<div id="hdesc" style="font-size:13px;color:{SLATE};margin-top:8px;">'
                 f'{_esc(init.get("description", ""))}</div>'
@@ -709,7 +776,7 @@ class GameViewer:
                 '    if(p>0.25) return "' + GOLD + '";'
                 '    return "' + BLOOD + '";'
                 '  }catch(e){ return "' + SLATE + '"; } }'
-                'function setBackdrop(url){'
+                'function setBackdrop(url, s){'
                 '  const front = showingA ? $("bgA") : $("bgB");'
                 '  const back = showingA ? $("bgB") : $("bgA");'
                 '  const cur = front.getAttribute("src") || "";'
@@ -718,6 +785,10 @@ class GameViewer:
                 '  const pre = new Image();'
                 '  pre.onload = () => {'
                 '    back.src = url; back.style.display = "block";'
+                '    if(s && s.zoom > 1){'
+                '      back.style.transformOrigin = (s.zoom_x*100) + "% " + (s.zoom_y*100) + "%";'
+                '      back.style.transform = "scale(" + s.zoom + ")";'
+                '    } else { back.style.transform = "none"; }'
                 '    back.classList.remove("bg-hidden"); back.classList.add("bg-visible");'
                 '    front.classList.remove("bg-visible"); front.classList.add("bg-hidden");'
                 '    showingA = !showingA; $("terrain").style.display = "none"; };'
@@ -744,7 +815,8 @@ class GameViewer:
                 '      $("hptext").textContent = s.hp + "/" + s.max_hp;'
                 '    } else { $("hptext").textContent = (s.hp ?? "?") + "/" + (s.max_hp ?? "?"); }'
                 '  }catch(e){}'
-                '  try{ setBackdrop(s.backdrop || ""); }catch(e){}'
+                '  try{ setBackdrop(s.backdrop || "", s); }catch(e){}'
+                '  try{ if(s.tokens_viewbox){ $("tokens").setAttribute("viewBox", s.tokens_viewbox); } }catch(e){}'
                 '  try{'
                 '    if(s.backdrop){ $("terrain").style.display = "none"; }'
                 '    else if(s.terrain_svg){ $("terrain").innerHTML = s.terrain_svg;'
@@ -758,6 +830,7 @@ class GameViewer:
                 '      requestAnimationFrame(() => { tok.innerHTML = s.tokens_svg; tok.style.opacity = "1"; });'
                 '    }'
                 '  }catch(e){}'
+                '  try{ if(typeof s.labels_svg === "string") $("labels").innerHTML = s.labels_svg; }catch(e){}'
                 '  try{ $("hdesc").textContent = s.description || ""; }catch(e){}'
                 '  try{ if(typeof s.exits_html === "string") $("hexits").innerHTML = s.exits_html; }catch(e){}'
                 '  try{ if(typeof s.pack_html === "string") $("hpack").innerHTML = s.pack_html; }catch(e){}'
@@ -838,8 +911,32 @@ class GameViewer:
         return (f'<ellipse cx="{cx}" cy="{feet_y + 4}" rx="{w / 2}" ry="7" '
                 f'fill="#000000" opacity="0.35"/>')
 
-    def _tokens_svg(self, me, world, loc_id, loc_type, baseline, url_mode="file"):
-        """Character, monsters, loot, NPCs and labels, in stage coordinates."""
+    def _zoom(self, loc_id):
+        """(zoom, zoom_x, zoom_y) for a map: how much to scale the backdrop and
+        where the anchor sits (0-1 fractions of the stage). Never raises."""
+        try:
+            lay = STAGE_LAYOUT.get(loc_id, DEFAULT_LAYOUT)
+            z = max(1.0, float(lay.get("zoom", 1.0) or 1.0))
+            zx = min(1.0, max(0.0, float(lay.get("zoom_x", 0.5))))
+            zy = min(1.0, max(0.0, float(lay.get("zoom_y", 0.75))))
+            return z, zx, zy
+        except Exception:
+            return 1.0, 0.5, 0.75
+
+    def _zoom_viewbox(self, loc_id):
+        """viewBox (x, y, w, h) of the visible region in stage coordinates."""
+        z, zx, zy = self._zoom(loc_id)
+        vx = STAGE_W * (1 - 1 / z) * zx
+        vy = STAGE_H * (1 - 1 / z) * zy
+        return vx, vy, STAGE_W / z, STAGE_H / z
+
+    def _tokens_svg(self, me, world, loc_id, loc_type, url_mode="file"):
+        """Character, monsters, loot, NPCs — split into two layers.
+
+        Sprites and shadows are drawn in stage coordinates and scale with the
+        backdrop zoom; name labels, HP bars and captions are drawn in screen
+        coordinates so text stays a constant readable size. Returns the pair
+        (sprites_svg, labels_svg)."""
         ad = self.assets_dir
         decor = DECOR.get(loc_type, SLATE)
         lay = STAGE_LAYOUT.get(loc_id, DEFAULT_LAYOUT)
@@ -847,18 +944,26 @@ class GameViewer:
         player_feet = lay["player_feet"]
         monster_feet = lay["monster_feet"]
         loot_y = lay["loot_y"]
-        parts = []
+        zoom, _, _ = self._zoom(loc_id)
+        vx, vy, _, _ = self._zoom_viewbox(loc_id)
+
+        def vis(x, y):
+            """Stage point -> screen point on the (unscaled) labels layer."""
+            return (x - vx) * zoom, (y - vy) * zoom
+
+        spr, lab = [], []
 
         # NPCs: back row, human scale with perspective (~0.77x player).
         npcs = [n for n in (world.get("npcs", []) or []) if isinstance(n, dict)][:4]
         for i, n in enumerate(npcs):
             cx = lay["npc_x0"] + i * 120
             x, y = self._place(cx, npc_y, NPC_SIZE)
-            parts.append(self._shadow(cx, npc_y, NPC_SIZE * 0.55))
-            parts.append(_nested_art(ad, n.get("asset") or _expected("npc", n.get("npc_id", "")),
-                                     x, y, NPC_SIZE, VERDIGRIS, n.get("name", "?"), url_mode))
-            parts.append(f'<text x="{cx}" y="{y - 8}" text-anchor="middle" font-size="13" '
-                         f'fill="{PARCHMENT}" {_halo(2.5)}>{_esc(n.get("name", "?"))}</text>')
+            spr.append(self._shadow(cx, npc_y, NPC_SIZE * 0.55))
+            spr.append(_nested_art(ad, n.get("asset") or _expected("npc", n.get("npc_id", "")),
+                                   x, y, NPC_SIZE, VERDIGRIS, n.get("name", "?"), url_mode))
+            lx, ly = vis(cx, y)
+            lab.append(f'<text x="{lx}" y="{ly - 8}" text-anchor="middle" font-size="13" '
+                       f'fill="{PARCHMENT}" {_halo(2.5)}>{_esc(n.get("name", "?"))}</text>')
 
         # The character, front row: fighting stance in combat, relaxed pose
         # when no monsters are around.
@@ -868,14 +973,15 @@ class GameViewer:
         psize = PLAYER_SIZE_FIGHT if fighting else PLAYER_SIZE_STAND
         ppad = FOOT_PAD.get("player" if fighting else "player_standing", DEFAULT_FOOT_PAD)
         px, py = self._place(cx, player_feet, psize, ppad)
-        parts.append(f'<text x="{cx}" y="{py - 40}" text-anchor="middle" font-size="14" '
-                     f'fill="{GOLD}" font-weight="bold" {_halo(3)}>'
-                     f'{_esc(name)} · Lv {_esc(me.get("level", "?"))}</text>')
-        parts.append(_svg_bar(cx - 50, py - 32, 100,
-                              me.get("hp", 0), me.get("max_hp", 0)))
-        parts.append(self._shadow(cx, player_feet, psize * 0.5))
-        parts.append(_nested_art(ad, me.get("asset") or _expected("player", "fighting" if fighting else "standing"),
-                                 px, py, psize, GOLD, name, url_mode))
+        lx, ly = vis(cx, py)
+        lab.append(f'<text x="{lx}" y="{ly - 40}" text-anchor="middle" font-size="14" '
+                   f'fill="{GOLD}" font-weight="bold" {_halo(3)}>'
+                   f'{_esc(name)} · Lv {_esc(me.get("level", "?"))}</text>')
+        lab.append(_svg_bar(lx - 50, ly - 32, 100,
+                            me.get("hp", 0), me.get("max_hp", 0)))
+        spr.append(self._shadow(cx, player_feet, psize * 0.5))
+        spr.append(_nested_art(ad, me.get("asset") or _expected("player", "fighting" if fighting else "standing"),
+                               px, py, psize, GOLD, name, url_mode))
 
         # Monsters: front row, feet on their ground line, size by species.
         mons = [m for m in (world.get("monsters", []) or []) if isinstance(m, dict)]
@@ -887,58 +993,75 @@ class GameViewer:
             flot = WRAITH_FLOAT if mname == "Marsh Wraith" else 0
             cxm = lay["monster_x0"] + i * (size + 45)
             xm, ym = self._place(cxm, monster_feet, size, pad, flot)
-            parts.append(f'<text x="{cxm}" y="{ym - 36}" text-anchor="middle" '
-                         f'font-size="13" fill="{PARCHMENT}" {_halo(2.5)}>{_esc(mname)}</text>')
-            parts.append(_svg_bar(cxm - 40, ym - 30, 80, m.get("hp", 0), m.get("max_hp", 0)))
-            parts.append(self._shadow(cxm, monster_feet, size * 0.6))
-            parts.append(_nested_art(ad, m.get("asset") or _expected("monster", mname),
-                                     xm, ym, size, BLOOD, mname, url_mode))
+            lx, ly = vis(cxm, ym)
+            lab.append(f'<text x="{lx}" y="{ly - 36}" text-anchor="middle" '
+                       f'font-size="13" fill="{PARCHMENT}" {_halo(2.5)}>{_esc(mname)}</text>')
+            lab.append(_svg_bar(lx - 40, ly - 30, 80, m.get("hp", 0), m.get("max_hp", 0)))
+            spr.append(self._shadow(cxm, monster_feet, size * 0.6))
+            spr.append(_nested_art(ad, m.get("asset") or _expected("monster", mname),
+                                   xm, ym, size, BLOOD, mname, url_mode))
             if (m.get("drops") or {}).get("name"):
-                parts.append(f'<circle cx="{xm + size - 6}" cy="{ym + 10}" r="7" fill="{GOLD}">'
-                             f'<title>{_esc(m["drops"]["name"])}</title></circle>')
+                spr.append(f'<circle cx="{xm + size - 6}" cy="{ym + 10}" r="7" fill="{GOLD}">'
+                           f'<title>{_esc(m["drops"]["name"])}</title></circle>')
         if len(mons) > len(shown):
-            parts.append(f'<text x="920" y="{monster_feet - 130}" text-anchor="middle" font-size="14" '
-                         f'fill="{SLATE}" {_halo(2.5)}>+{len(mons) - len(shown)} more</text>')
+            lx, ly = vis(920, monster_feet - 130)
+            lab.append(f'<text x="{lx}" y="{ly}" text-anchor="middle" font-size="14" '
+                       f'fill="{SLATE}" {_halo(2.5)}>+{len(mons) - len(shown)} more</text>')
         if not mons:
-            parts.append(f'<text x="640" y="{monster_feet - 60}" text-anchor="middle" font-size="15" '
-                         f'fill="{SLATE}" {_halo(3)}>No monsters — safe to rest.</text>')
+            lx, ly = vis(640, monster_feet - 60)
+            lab.append(f'<text x="{lx}" y="{ly}" text-anchor="middle" font-size="15" '
+                       f'fill="{SLATE}" {_halo(3)}>No monsters — safe to rest.</text>')
 
         # Loot lying on the ground line.
         loot = [g for g in (world.get("items_on_ground", []) or []) if isinstance(g, dict)][:4]
         for i, g in enumerate(loot):
             cxg = 330 + i * 90
             xg, yg = self._place(cxg, loot_y, LOOT_SIZE, 0.1)
-            parts.append(self._shadow(cxg, loot_y, LOOT_SIZE * 0.7))
-            parts.append(_nested_art(ad, g.get("asset") or _expected("item", g.get("item_id", "")),
-                                     xg, yg, LOOT_SIZE, GOLD, g.get("name", "?"), url_mode))
+            spr.append(self._shadow(cxg, loot_y, LOOT_SIZE * 0.7))
+            spr.append(_nested_art(ad, g.get("asset") or _expected("item", g.get("item_id", "")),
+                                   xg, yg, LOOT_SIZE, GOLD, g.get("name", "?"), url_mode))
             qty = f' x{g.get("qty", 1)}' if g.get("qty", 1) != 1 else ""
-            parts.append(f'<text x="{cxg}" y="{yg - 6}" text-anchor="middle" font-size="12" '
-                         f'fill="{GOLD}" {_halo(2.5)}>{_esc(g.get("name", "?"))}{_esc(qty)}</text>')
+            lx, ly = vis(cxg, yg)
+            lab.append(f'<text x="{lx}" y="{ly - 6}" text-anchor="middle" font-size="12" '
+                       f'fill="{GOLD}" {_halo(2.5)}>{_esc(g.get("name", "?"))}{_esc(qty)}</text>')
 
-        # Caption
-        parts.append(f'<text x="16" y="34" font-size="24" fill="{PARCHMENT}" '
-                     f'font-family="Georgia,serif" {_halo(4)}>{_esc(loc_id)}</text>')
-        parts.append(f'<text x="{STAGE_W - 16}" y="34" font-size="13" fill="{decor}" '
-                     f'text-anchor="end" {_halo(2.5)}>{_esc(loc_type or "?")}</text>')
-        return "".join(parts)
+        # Caption: fixed screen positions (HUD-like), unaffected by zoom.
+        lab.append(f'<text x="16" y="34" font-size="24" fill="{PARCHMENT}" '
+                   f'font-family="Georgia,serif" {_halo(4)}>{_esc(loc_id)}</text>')
+        lab.append(f'<text x="{STAGE_W - 16}" y="34" font-size="13" fill="{decor}" '
+                   f'text-anchor="end" {_halo(2.5)}>{_esc(loc_type or "?")}</text>')
+        return "".join(spr), "".join(lab)
 
     def _stage(self, me, world, loc_id, loc_type):
         baseline = BASELINE.get(loc_id, DEFAULT_BASELINE)
-        tokens = self._tokens_svg(me, world, loc_id, loc_type, baseline)
+        tokens, labels = self._tokens_svg(me, world, loc_id, loc_type)
+        vx, vy, vw, vh = self._zoom_viewbox(loc_id)
+        z, zx, zy = self._zoom(loc_id)
         bg = self.background_url(loc_id)
         if bg:
-            # Backdrop PNG is 2848x1600 (1.78) == 960x540 stage, so the SVG
-            # overlay maps 1:1 with preserveAspectRatio="xMidYMid meet".
+            # Backdrop PNG is 2848x1600 (1.78) == 960x540 stage. Zoom crops it
+            # to the visible region; the tokens viewBox matches, so sprite feet
+            # stay on the same ground pixels.
+            style = ""
+            if z > 1:
+                style = (f"transform:scale({z:g});transform-origin:"
+                         f"{zx * 100:g}% {zy * 100:g}%;")
             return (
                 f'<div style="position:relative;border-radius:10px;overflow:hidden;aspect-ratio:16/9;">'
                 f'<img src="{_esc(bg)}" alt="{_esc(loc_id)}" '
-                f'style="width:100%;height:100%;object-fit:cover;display:block;"/>'
-                f'<svg viewBox="0 0 {STAGE_W} {STAGE_H}" preserveAspectRatio="xMidYMid meet" '
+                f'style="width:100%;height:100%;object-fit:cover;display:block;{style}"/>'
+                f'<svg viewBox="{vx:.2f} {vy:.2f} {vw:.2f} {vh:.2f}" preserveAspectRatio="xMidYMid meet" '
                 f'style="position:absolute;inset:0;width:100%;height:100%;">{tokens}</svg>'
+                f'<svg viewBox="0 0 {STAGE_W} {STAGE_H}" preserveAspectRatio="xMidYMid meet" '
+                f'style="position:absolute;inset:0;width:100%;height:100%;">{labels}</svg>'
                 f'</div>')
-        return (f'<svg viewBox="0 0 {STAGE_W} {STAGE_H}" '
-                f'style="width:100%;height:auto;display:block;">'
-                f'{self._terrain_svg(loc_id, loc_type, baseline)}{tokens}</svg>')
+        return (f'<div style="position:relative;border-radius:10px;overflow:hidden;aspect-ratio:16/9;">'
+                f'<svg viewBox="{vx:.2f} {vy:.2f} {vw:.2f} {vh:.2f}" '
+                f'style="position:absolute;inset:0;width:100%;height:100%;display:block;">'
+                f'{self._terrain_svg(loc_id, loc_type, baseline)}{tokens}</svg>'
+                f'<svg viewBox="0 0 {STAGE_W} {STAGE_H}" '
+                f'style="position:absolute;inset:0;width:100%;height:100%;">{labels}</svg>'
+                f'</div>')
 
     def _render(self, turn, me_raw, here_raw, action_desc, result_narrative, log, status,
                 _fallback=None):
