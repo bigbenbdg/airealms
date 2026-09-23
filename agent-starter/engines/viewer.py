@@ -145,6 +145,18 @@ SPRITE_VIEWBOX = {
 }
 DEFAULT_SPRITE_VIEWBOX = (0, 0, 2048, 2048)
 
+# Opening screen: all six Blender-rendered map backgrounds as one collage,
+# laid out like the title_reference.png style render (3x2 grid, ink frame,
+# gold Georgia title). Missing files fall back to drawn-terrain gradients.
+TITLE_MAPS = (
+    ("riverside_village", "Riverside Village"),
+    ("oakhollow_forest", "Oakhollow Forest"),
+    ("capital_city", "Capital City"),
+    ("deep_cave", "Deep Cave"),
+    ("sunken_marsh", "Sunken Marsh"),
+    ("ember_ridge", "Ember Ridge"),
+)
+
 LOCATION_TYPE = {
     "riverside_village": "town", "capital_city": "town",
     "oakhollow_forest": "wild", "sunken_marsh": "wild",
@@ -582,6 +594,55 @@ class GameViewer:
             return "<html><body>viewer unavailable</body></html>"
 
     # -- stage ---------------------------------------------------------
+    # -- opening screen -------------------------------------------------
+    def _title_screen_html(self):
+        """Overlay collage of all six map backdrops, Blender-reference styled.
+
+        Shown when the viewer first loads; JS dismisses it (fade) on click or
+        as soon as the first real turn arrives. Missing files fall back to a
+        per-location-type gradient so the screen never breaks. Never raises."""
+        try:
+            panels = []
+            for loc_id, label in TITLE_MAPS:
+                url = self.background_http_path(loc_id) or self.background_url(loc_id)
+                loc_type = LOCATION_TYPE.get(loc_id, "town")
+                if url:
+                    style = (f"background-image:url('{_esc(url)}');"
+                             "background-size:cover;background-position:center;")
+                else:
+                    style = (f"background:linear-gradient(180deg,{SKY[loc_type]},"
+                             f"{GROUND[loc_type]});")
+                panels.append(
+                    '<div style="position:relative;aspect-ratio:16/9;border-radius:8px;'
+                    f'overflow:hidden;border:1px solid {HAIRLINE};{style}">'
+                    '<div style="position:absolute;inset:0;background:'
+                    'linear-gradient(180deg,transparent 55%,rgba(10,12,18,.78));"></div>'
+                    f'<div style="position:absolute;left:0;right:0;bottom:4px;text-align:center;'
+                    f'font-size:10px;letter-spacing:.08em;color:{SLATE};">'
+                    f'{_esc(label.upper())}</div></div>')
+            grid = "".join(panels)
+            return (
+                '<div id="titlescreen" style="position:fixed;inset:0;z-index:60;'
+                'background:radial-gradient(120% 90% at 50% 40%,#1B1F2C 0%,#0B0D13 100%);'
+                'display:flex;align-items:center;justify-content:center;cursor:pointer;'
+                'transition:opacity .6s ease;">'
+                '<div style="width:min(92vw,860px);">'
+                f'<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;">{grid}</div>'
+                f'<div style="text-align:center;margin-top:14px;">'
+                f'<div style="width:420px;max-width:80%;height:1px;background:{GOLD};'
+                'margin:0 auto;opacity:.7;"></div>'
+                f'<div style="font-family:Georgia,serif;font-size:52px;color:{GOLD};'
+                'margin:10px 0 4px;text-shadow:0 2px 12px rgba(0,0,0,.6);">AI REALMS</div>'
+                f'<div style="width:420px;max-width:80%;height:1px;background:{GOLD};'
+                'margin:0 auto;opacity:.7;"></div>'
+                f'<div style="font-size:13px;letter-spacing:.25em;color:{PARCHMENT};'
+                'margin-top:12px;">AN AGENT PLAYS &middot; YOU SPECTATE</div>'
+                f'<div style="font-size:11px;color:{SLATE};margin-top:8px;">'
+                'click anywhere to enter the realm</div>'
+                '</div></div></div>')
+        except Exception:
+            return ""
+
     def background_url(self, loc_id):
         """file:// URL of the Blender-rendered backdrop, or '' when missing."""
         try:
@@ -734,6 +795,7 @@ class GameViewer:
                 "#tokens{transition:opacity .25s ease;}"
                 "</style></head>"
                 f'<body style="background:{INK};color:{PARCHMENT};font-family:system-ui,sans-serif;margin:0;">'
+                + self._title_screen_html() +
                 f'<div id="banner" style="display:none;background:{BLOOD};color:#fff;'
                 'text-align:center;padding:8px;font-weight:bold;">'
                 '☠ YOU DIED — see the CLI debrief ☠</div>'
@@ -786,6 +848,14 @@ class GameViewer:
                 '</div></div>'
                 '<script>'
                 f'const POLL_S = {poll_js};'
+                'let titleDismissed = false;'
+                'function dismissTitle(){'
+                '  if(titleDismissed) return; titleDismissed = true;'
+                '  try{ const t = document.getElementById("titlescreen");'
+                '    if(t){ t.style.opacity = "0"; setTimeout(() => t.remove(), 700); } }catch(e){}'
+                '}'
+                'try{ const ts = document.getElementById("titlescreen");'
+                '  if(ts){ ts.addEventListener("click", dismissTitle); } }catch(e){}'
                 'let lastTurn = ' + repr(int(init.get("turn", 0) or 0)) + ';'
                 'let lastSeq = ' + repr(int(init.get("seq", 0) or 0)) + ';'
                 'let lastTokens = null;'
@@ -821,6 +891,7 @@ class GameViewer:
                 '  else if(typeof s.turn === "number" && s.turn === lastTurn) return;'
                 '  if(typeof s.turn === "number") lastTurn = s.turn;'
                 '  try{ document.title = "AI Realms — " + (s.name||"?") + " @ " + (s.loc_name || s.loc_id || "?"); }catch(e){}'
+                '  try{ if(Number(s.turn) > 0) dismissTitle(); }catch(e){}'
                 '  try{ $("hname").textContent = s.name ?? "?"; }catch(e){}'
                 '  try{ $("hlevel").textContent = s.level ?? "?"; }catch(e){}'
                 '  try{ $("hgold").textContent = s.gold ?? "?"; }catch(e){}'
