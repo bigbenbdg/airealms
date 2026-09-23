@@ -92,11 +92,15 @@ DEFAULT_BASELINE = DEFAULT_LAYOUT["player_feet"]
 # Ember Drake. NPC back row sits between. Backdrop zoom stays gentle so the
 # scene keeps its natural proportions — size comes from the boxes here.
 PLAYER_SIZE_FIGHT, PLAYER_SIZE_STAND, NPC_SIZE, LOOT_SIZE = 240, 230, 180, 50
+# Monster boxes are sized so the *visible* height (content aspect after the
+# SPRITE_VIEWBOX crop) is >= the player's ~240px: monsters should tower at
+# least as tall as the character. Wide sprites (rat, wolf) get bigger boxes
+# to compensate; tall ones (wraith) need almost none.
 MONSTER_SIZE = {
-    "Giant Rat": 100, "Forest Wolf": 125, "Road Bandit": 205,
-    "Marsh Wraith": 220, "Cave Troll": 275, "Ember Drake": 300,
+    "Giant Rat": 305, "Forest Wolf": 335, "Road Bandit": 255,
+    "Marsh Wraith": 255, "Cave Troll": 280, "Ember Drake": 295,
 }
-DEFAULT_MONSTER_SIZE = 160
+DEFAULT_MONSTER_SIZE = 260
 # Bottom transparent padding fraction per sprite. Sprites are cropped to
 # their alpha-content box (see SPRITE_VIEWBOX), so the *visible* feet reach
 # the image edge and only a tiny nudge keeps them on the ground line.
@@ -992,13 +996,26 @@ class GameViewer:
 
         # Monsters: front row, feet on their ground line, size by species.
         mons = [m for m in (world.get("monsters", []) or []) if isinstance(m, dict)]
-        shown = mons[:4]
+        # Show only as many monsters as fit side by side without becoming an
+        # unreadable pile; the rest are counted by the "+N more" label.
+        m_x0 = lay["monster_x0"]
+        avail = vis_right - 24 - m_x0
+        if mons:
+            biggest = max(MONSTER_SIZE.get(m.get("name", "?"), DEFAULT_MONSTER_SIZE)
+                          for m in mons[:4])
+            cap = max(1, round(avail / (0.6 * biggest)))
+        else:
+            cap = 0
+        shown = mons[:cap]
+        # Even slots across the monster zone so packs spread out instead of
+        # piling onto the right crop edge when the sprites are large.
+        slot = ((vis_right - 24 - m_x0) / len(shown)) if shown else 0.0
         for i, m in enumerate(shown):
             mname = m.get("name", "?")
             size = MONSTER_SIZE.get(mname, DEFAULT_MONSTER_SIZE)
             pad = FOOT_PAD.get(mname, DEFAULT_FOOT_PAD)
             flot = WRAITH_FLOAT if mname == "Marsh Wraith" else 0
-            cxm = clamp_cx(lay["monster_x0"] + i * (size + 30), size)
+            cxm = clamp_cx(m_x0 + slot * (i + 0.5) if shown else m_x0, size)
             xm, ym = self._place(cxm, monster_feet, size, pad, flot)
             lx, ly = vis(cxm, ym)
             lab.append(f'<text x="{lx}" y="{ly - 36}" text-anchor="middle" '
@@ -1011,8 +1028,8 @@ class GameViewer:
                 spr.append(f'<circle cx="{xm + size - 6}" cy="{ym + 10}" r="7" fill="{GOLD}">'
                            f'<title>{_esc(m["drops"]["name"])}</title></circle>')
         if len(mons) > len(shown):
-            lx, ly = vis(920, monster_feet - 130)
-            lab.append(f'<text x="{lx}" y="{ly}" text-anchor="middle" font-size="14" '
+            _, ly = vis(0, monster_feet - 130)
+            lab.append(f'<text x="{STAGE_W - 16}" y="{ly}" text-anchor="end" font-size="14" '
                        f'fill="{SLATE}" {_halo(2.5)}>+{len(mons) - len(shown)} more</text>')
         if not mons:
             lx, ly = vis(640, monster_feet - 60)
