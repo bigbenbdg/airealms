@@ -1020,7 +1020,10 @@ class GameViewer:
             lx, ly = vis(cxm, ym)
             lab.append(f'<text x="{lx}" y="{ly - 36}" text-anchor="middle" '
                        f'font-size="13" fill="{PARCHMENT}" {_halo(2.5)}>{_esc(mname)}</text>')
-            lab.append(_svg_bar(lx - 40, ly - 30, 80, m.get("hp", 0), m.get("max_hp", 0)))
+            # HP bar down at the monster's feet so it never rides above the
+            # scene for tall sprites (troll, drake).
+            _, fy = vis(cxm, monster_feet)
+            lab.append(_svg_bar(lx - 40, fy + 6, 80, m.get("hp", 0), m.get("max_hp", 0)))
             spr.append(_nested_art(ad, m.get("asset") or _expected("monster", mname),
                                    xm, ym, size, BLOOD, mname, url_mode))
             if (m.get("drops") or {}).get("name"):
