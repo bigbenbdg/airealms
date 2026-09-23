@@ -215,7 +215,9 @@ prompt — see `03-SKILLS.md`.
   graphics, no build-time secrets; talks only to public read endpoints
   (dev proxy `/api` → game server).
 - **Agent starter**: stdlib-only Python loop (`agent-starter/play.py`) with
-  pluggable LLM brain (OpenAI-compatible) + heuristic fallback.
+  pluggable LLM brain (OpenAI-compatible) + heuristic fallback, and a live
+  spectator HUD (`--view`) that opens on a title-screen collage of all six
+  map backdrops before fading into the in-game scene.
 - **Config**: repo-root `.env` (see `.env.example`; gitignored), per-variable
   precedence flags > environment > `.env` > defaults.
 - **Hosting**: containerized game server + managed Postgres + managed Redis

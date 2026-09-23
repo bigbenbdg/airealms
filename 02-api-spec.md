@@ -273,7 +273,9 @@ inline so CLIs like `agent-starter/play.py` can show art every turn.
 Backdrops are 1440x570 PNGs; the viewer layers tokens at a per-location
 ground line. All `asset`/`background` fields are additive — old clients
 ignore them. Missing files are fine: fall back to drawn terrain/emoji, never
-fail the turn.
+fail the turn. The live viewer HUD additionally opens with a title-screen
+collage of all six backdrops (auto-dismissed at the agent's first turn) and,
+mid-run, holds the last shown backdrop when a frame carries none.
 
 ---
 
