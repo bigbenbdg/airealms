@@ -94,6 +94,8 @@ DEFAULT_BASELINE = DEFAULT_LAYOUT["player_feet"]
 PLAYER_SIZE_FIGHT, PLAYER_SIZE_STAND, NPC_SIZE, LOOT_SIZE = 240, 230, 180, 50
 # Per-NPC box overrides: Warden Cassia stands as tall as the main character.
 NPC_SIZE_OVERRIDE = {"npc_warden": 240}
+# Per-NPC vertical nudges (negative = up), e.g. Warden Cassia on ember_ridge.
+NPC_Y_OFFSET = {"npc_warden": -25}
 # Monster boxes target ~80% of the player's visible height (~190px vs the
 # player's ~240px): visible height = size * min(bw,bh)/max(bw,bh) after the
 # SPRITE_VIEWBOX crop, so wide sprites (rat, wolf) get bigger boxes than tall
@@ -969,8 +971,9 @@ class GameViewer:
         npcs = [n for n in (world.get("npcs", []) or []) if isinstance(n, dict)][:4]
         for i, n in enumerate(npcs):
             nsize = NPC_SIZE_OVERRIDE.get(n.get("npc_id", ""), NPC_SIZE)
+            noff = NPC_Y_OFFSET.get(n.get("npc_id", ""), 0)
             cx = clamp_cx(lay["npc_x0"] + i * 165, nsize)
-            x, y = self._place(cx, npc_y, nsize)
+            x, y = self._place(cx, npc_y + noff, nsize)
             spr.append(_nested_art(ad, n.get("asset") or _expected("npc", n.get("npc_id", "")),
                                    x, y, nsize, VERDIGRIS, n.get("name", "?"), url_mode))
             lx, ly = vis(cx, y)
