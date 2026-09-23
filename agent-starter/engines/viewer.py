@@ -92,15 +92,15 @@ DEFAULT_BASELINE = DEFAULT_LAYOUT["player_feet"]
 # Ember Drake. NPC back row sits between. Backdrop zoom stays gentle so the
 # scene keeps its natural proportions — size comes from the boxes here.
 PLAYER_SIZE_FIGHT, PLAYER_SIZE_STAND, NPC_SIZE, LOOT_SIZE = 240, 230, 180, 50
-# Monster boxes are sized so the *visible* height (content aspect after the
-# SPRITE_VIEWBOX crop) is >= the player's ~240px: monsters should tower at
-# least as tall as the character. Wide sprites (rat, wolf) get bigger boxes
-# to compensate; tall ones (wraith) need almost none.
+# Monster boxes target ~80% of the player's visible height (~190px vs the
+# player's ~240px): visible height = size * min(bw,bh)/max(bw,bh) after the
+# SPRITE_VIEWBOX crop, so wide sprites (rat, wolf) get bigger boxes than tall
+# ones (wraith) to land on the same height.
 MONSTER_SIZE = {
-    "Giant Rat": 305, "Forest Wolf": 335, "Road Bandit": 255,
-    "Marsh Wraith": 255, "Cave Troll": 280, "Ember Drake": 295,
+    "Giant Rat": 232, "Forest Wolf": 255, "Road Bandit": 205,
+    "Marsh Wraith": 190, "Cave Troll": 212, "Ember Drake": 225,
 }
-DEFAULT_MONSTER_SIZE = 260
+DEFAULT_MONSTER_SIZE = 220
 # Bottom transparent padding fraction per sprite. Sprites are cropped to
 # their alpha-content box (see SPRITE_VIEWBOX), so the *visible* feet reach
 # the image edge and only a tiny nudge keeps them on the ground line.
@@ -110,7 +110,8 @@ FOOT_PAD = {
     "Marsh Wraith": 0.012, "Cave Troll": 0.012, "Ember Drake": 0.012,
 }
 DEFAULT_FOOT_PAD = 0.012
-WRAITH_FLOAT = 14  # the wraith hovers instead of standing
+# All monsters stand on the ground line — no hovering.
+WRAITH_FLOAT = 0
 
 # Alpha-content box (x, y, w, h) per sprite on its 2048x2048 canvas,
 # measured once with Pillow. Rendering through this viewBox crops away the
