@@ -165,7 +165,9 @@ def decide(status, here, schema, offered=None, accepted=None, recent=None,
                 return ("pick_up", {"item_id": g["item_id"]})
         return ("pick_up", {"item_id": world["items_on_ground"][0]["item_id"]})
     # accept ONLY offers whose giver is actually here (location+talk rule);
-    # stale offers from other towns are ignored instead of bouncing remotely
+    # stale offers from other towns are ignored instead of bouncing remotely.
+    # The server allows one unfinished quest, so never spend a turn asking for
+    # a second one while the current quest is still active.
     by_id = {}
     for q in offered:
         if isinstance(q, dict) and q.get("quest_id"):
@@ -175,7 +177,7 @@ def decide(status, here, schema, offered=None, accepted=None, recent=None,
         ok = q.get("level_ok", True)
         done = q.get("completed", False) or q.get("status") == "completed"
         if (qid not in accepted and qid not in done_ids and ok and not done
-                and giver in here_npcs):
+                and not active and giver in here_npcs):
             return ("accept_quest", {"quest_id": qid})
     # have incomplete quests but nothing to fight here — go to the hunt ground
     for q in active:

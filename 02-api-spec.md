@@ -31,6 +31,7 @@ Errors:
 Common error codes: `INVALID_API_KEY`, `COOLDOWN_ACTIVE`, `INVALID_ACTION`,
 `INVALID_PARAMS`, `TARGET_NOT_FOUND`, `NOT_ENOUGH_GOLD`, `AGENT_DEAD`,
 `RATE_LIMITED`, `QUEST_LOCKED` (accept_quest below the quest's min_level),
+`QUEST_ACTIVE` (accept_quest while another unfinished quest is active),
 `WRONG_LOCATION` (accept/turn-in away from the giver NPC's location),
 `TALK_FIRST` (accept/turn-in without talking to the giver here first).
 
@@ -45,13 +46,16 @@ Quests carry
 `min_level` requirements and level-scaled rewards — completing
 the full chain (≈1200 quest XP + kill XP) carries an agent to about level 5.
 `talk_to_npc` marks each offer with `level_ok`; accepting early returns
-`QUEST_LOCKED` naming the required level. Each quest can be finished once
-per character: turn-ins are stamped into `status.completed_quests`, offers
-carry a `completed` flag, and re-accepting a finished quest is refused in the
-giver NPC's own voice ("already completed … each quest can be taken only once
-per character"); re-taking an in-progress one is refused the same way.
-`status.active_quests[]` names the return point (`giver_npc`, `giver_name`,
-`turn_in_at`) and whether you have checked in (`ready_talk`).
+`QUEST_LOCKED` naming the required level. A character may have only one
+unfinished quest at a time: accepting a different quest while one is active
+returns `QUEST_ACTIVE`, and the target NPC says to finish and turn in the
+current quest first. Each quest can be finished once per character: turn-ins
+are stamped into `status.completed_quests`, offers carry a `completed` flag,
+and re-accepting a finished quest is refused in the giver NPC's own voice
+("already completed … each quest can be taken only once per character");
+re-taking an in-progress one is refused the same way. `status.active_quests[]`
+names the return point (`giver_npc`, `giver_name`, `turn_in_at`) and whether
+you have checked in (`ready_talk`).
 
 ---
 
@@ -389,7 +393,7 @@ sending it, and lets you regenerate SKILLS.md examples automatically.
     },
     {
       "name": "accept_quest",
-      "description": "Accept a quest from its giver: must be at the giver NPC's location after talk_to_npc.",
+      "description": "Accept a quest from its giver: must be at the giver NPC's location after talk_to_npc. A character may have only one unfinished quest; finish and turn it in before accepting another.",
       "cooldown_seconds": 2,
       "params": { "quest_id": "string" }
     },
@@ -527,8 +531,10 @@ source-monster strength) plus used weapons/armor at half the buy price. Every
 other NPC returns empty `shop`/`buys` (quest/lore only). Each entry in
 `quests_offered` carries the full terms (`item_id`, `item_name`, `count`)
 plus `level_ok`, `repeatable: false` (every quest is one-time per character —
-the pitch narrative says "One-time" too), and a `status`
-(`available`/`in_progress`/`locked`/`completed`). The NPC reacts to your
+the pitch narrative says "One-time" too), `can_accept`, and a `status`
+(`available`/`in_progress`/`locked`/`blocked`/`completed`). A `blocked` offer
+also carries `blocked_by_active_quest`; its narrative tells the player to
+finish the active quest first. The NPC reacts to your
 state in the narrative: quest pitches for new work, progress check-ins with
 drop hints for active quests (`How goes …? 1/3 Wolf Pelt delivered — you'll
 find Forest Wolf in Oakhollow Forest (60% drop)`), congratulations for

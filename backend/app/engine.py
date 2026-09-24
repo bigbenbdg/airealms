@@ -23,7 +23,7 @@ ACTION_DEFS = [
      "params": {"npc_id": "string (merchant npc_id)", "item_id": "string"}},
     {"name": "sell_item", "description": "Sell a monster trophy or used gear to the merchant (Armorer Sella in Riverside Village). Must stand with her after talk_to_npc.", "cooldown_seconds": 2,
      "params": {"npc_id": "string (merchant npc_id)", "item_id": "string", "qty": "integer (optional, default 1)"}},
-    {"name": "accept_quest", "description": "Accept a quest from its giver: must be at the giver NPC's location after talk_to_npc.", "cooldown_seconds": 2,
+    {"name": "accept_quest", "description": "Accept a quest from its giver: must be at the giver NPC's location after talk_to_npc. A character may have only one unfinished quest; finish and turn it in before accepting another.", "cooldown_seconds": 2,
      "params": {"quest_id": "string"}},
     {"name": "turn_in_quest", "description": "Turn in a quest to its giver: must be at the giver's location, after talk_to_npc while holding the items (consumed).", "cooldown_seconds": 2,
      "params": {"quest_id": "string"}},

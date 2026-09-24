@@ -664,6 +664,56 @@ def test_npc_notices_quest_state_and_suggests_other_work():
     assert "For more work" in t3["narrative"] and "Scout Liora" in t3["narrative"]
 
 
+def test_only_one_active_quest_and_npc_explains_block():
+    c = fresh_client()
+    reg = register(c, "Focused")
+    h = {"Authorization": f"Bearer {reg['api_key']}"}
+
+    # Take the first quest.
+    _talk(c, h, reg["agent_id"], "npc_blacksmith")
+    _set_hp_and_ready(reg["agent_id"], 25)
+    assert c.post("/api/v1/actions", json={"action": "accept_quest",
+               "params": {"quest_id": "q_ratcatcher"}}, headers=h).status_code == 200
+
+    # Reach and talk to another quest giver, then try a second quest.
+    _set_level(reg["agent_id"], 2)
+    _move(c, h, reg["agent_id"], "oakhollow_forest")
+    talk = _talk(c, h, reg["agent_id"], "npc_scout")
+    offer = next(q for q in talk["data"]["quests_offered"] if q["quest_id"] == "q_wolfpack")
+    assert offer["status"] == "blocked"
+    assert offer["can_accept"] is False
+    assert offer["blocked_by_active_quest"] == "q_ratcatcher"
+    assert "active quest" in talk["narrative"]
+    assert "finish" in talk["narrative"].lower()
+
+    _set_hp_and_ready(reg["agent_id"], 25)
+    blocked = c.post("/api/v1/actions", json={"action": "accept_quest",
+                      "params": {"quest_id": "q_wolfpack"}}, headers=h)
+    assert blocked.status_code == 400
+    body = blocked.json()["detail"]["error"]
+    assert body["code"] == "QUEST_ACTIVE"
+    assert "Scout Liora" in body["message"]
+    assert "already have an active quest" in body["message"]
+    assert "The Ratcatcher's Request" in body["message"]
+    assert "turn it in" in body["message"].lower()
+    active_ids = [q["quest_id"] for q in c.get("/api/v1/status", headers=h).json()["data"]["active_quests"]]
+    assert active_ids == ["q_ratcatcher"]
+
+    # Once the first quest is turned in, the next quest can be accepted.
+    _give_quest_items(reg["agent_id"], "itm_rat_pelt", 3, "Rat Pelt")
+    _move(c, h, reg["agent_id"], "riverside_village")
+    _talk(c, h, reg["agent_id"], "npc_blacksmith")
+    _set_hp_and_ready(reg["agent_id"], 25)
+    assert c.post("/api/v1/actions", json={"action": "turn_in_quest",
+               "params": {"quest_id": "q_ratcatcher"}}, headers=h).status_code == 200
+    _move(c, h, reg["agent_id"], "oakhollow_forest")
+    _talk(c, h, reg["agent_id"], "npc_scout")
+    _set_hp_and_ready(reg["agent_id"], 25)
+    accepted = c.post("/api/v1/actions", json={"action": "accept_quest",
+                     "params": {"quest_id": "q_wolfpack"}}, headers=h)
+    assert accepted.status_code == 200, accepted.text
+
+
 def test_turn_in_without_items_fails_and_names_need():
     c = fresh_client()
     reg = register(c, "EmptyHanded")

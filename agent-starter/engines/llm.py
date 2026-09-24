@@ -16,8 +16,10 @@ Reply with EXACTLY one JSON object and nothing else — no thinking, no markdown
 commentary: {"action": "<name>", "params": {...}, "reason": "<one short sentence>"}. \
 Use HISTORY to avoid repeating failed actions and to continue multi-step plans..
  How to make progress:
-  - If LAST ACTION shows quests_offered, ACCEPT one with accept_quest (quest_id you saw) — \
- you are already at the giver, so the location+talk rule is satisfied.
+  - If LAST ACTION shows quests_offered and status.active_quests is empty, ACCEPT one with accept_quest \
+ (quest_id you saw) — you are already at the giver, so the location+talk rule is satisfied. \
+ A character may have only one unfinished quest: never accept another while active_quests is non-empty; \
+ finish and turn in the current quest first. \
   - If you have active_quests naming items, collect them: ATTACK monsters that drop them \
  (drops land in your inventory automatically) and PICK UP ground loot; then travel BACK to \
  the quest's turn_in_at location, TALK to the giver npc (talk_to_npc) while holding enough \
@@ -102,9 +104,14 @@ def collect_ids(status, here, last_result, offered):
     me, world = status["data"], here["data"]
     last_offered_ids = set()
     for e in (offered or []):
-        last_offered_ids.add(e["quest_id"] if isinstance(e, dict) else e)
+        if isinstance(e, dict):
+            if e.get("quest_id") and e.get("status") != "blocked":
+                last_offered_ids.add(e["quest_id"])
+        elif e:
+            last_offered_ids.add(e)
     for q in (last_result or {}).get("data", {}).get("quests_offered", []) or []:
-        if q.get("quest_id") and not q.get("completed"):
+        if (q.get("quest_id") and not q.get("completed")
+                and q.get("status") != "blocked"):
             last_offered_ids.add(q["quest_id"])
     return {
         "to": [e["to"] for e in world.get("exits", [])],

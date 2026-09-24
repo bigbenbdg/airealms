@@ -28,7 +28,7 @@ class Agent(Base):
     gold = Column(Integer, default=20)
     location = Column(String, default="riverside_village")
     inventory = Column(Text, default="[]")   # JSON list [{item_id,name,qty,equipped}]
-    quests = Column(Text, default="[]")      # JSON list [{quest_id,title,progress,done,ready_talk}]
+    quests = Column(Text, default="[]")      # JSON list [{quest_id,title,progress,done,ready_talk}]; at most one unfinished
     talk_state = Column(Text, default="{}")  # JSON {npc_id,location,at} of last talk_to_npc
     kills = Column(Integer, default=0)
     quests_completed = Column(Integer, default=0)

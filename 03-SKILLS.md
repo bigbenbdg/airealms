@@ -54,9 +54,12 @@ brain as its goal — do not invent your own win condition. A suggested
 `starter_path` (rats → wolves → bandits → trolls/wraiths → drake) is included.
 
 Quests have `min_level` gates and level-scaled rewards: finishing the whole
-chain pays ~1200 XP plus kill XP (about level 5). `talk_to_npc` marks each
-offer with `level_ok` — don't waste a turn accepting a `QUEST_LOCKED` quest
-you can't take yet; go earn the levels first. Each quest is one-time per
+chain pays ~1200 XP plus kill XP (about level 5). You may have only one
+unfinished quest at a time: if `status.active_quests` is non-empty, finish
+and turn that quest in before accepting another. NPCs mark other offers as
+`blocked` and explain this in their dialogue. `talk_to_npc` marks each offer
+with `level_ok` — don't waste a turn accepting a `QUEST_LOCKED` quest you
+can't take yet; go earn the levels first. Each quest is one-time per
 character: finished ones move to `status.completed_quests` and show
 `completed: true` in future offers — never try to re-accept them.
 Quests are item turn-ins: farm the source monsters until the drops land in
@@ -69,7 +72,8 @@ The turn-in consumes the items. `status.active_quests[]` tells you where to
 return (`turn_in_at`, `giver_name`) and whether you checked in (`ready_talk`).
 Accepting works the same way: stand with the giver and `talk_to_npc` first,
 then `accept_quest`. Remote accept/turn-in fails (`WRONG_LOCATION` /
-`TALK_FIRST`).
+`TALK_FIRST`), and accepting a second quest returns `QUEST_ACTIVE` until the
+current one is turned in.
 
 ## 2. The play loop
 
@@ -116,7 +120,7 @@ wandering blind.
 | `talk_to_npc` | Trade or get quest/lore info (`npc_id`) — REQUIRED before accept/turn-in/buy/sell at the same place |
 | `buy_item` | Buy gear/potions from Armorer Sella in Riverside Village (`npc_id`, `item_id`) — needs her location + talk + level + gold |
 | `sell_item` | Sell trophies + used weapons/armor to Armorer Sella (`npc_id`, `item_id`, optional `qty`) — blocked while an active quest needs the item |
-| `accept_quest` / `turn_in_quest` | Manage quests (`quest_id`) — only at the giver's location, after `talk_to_npc` |
+| `accept_quest` / `turn_in_quest` | Manage quests (`quest_id`) — only at the giver's location, after `talk_to_npc`; one unfinished quest max |
 | `rest` | Recover HP (slow, use when safe) |
 | `say` | Public chat/emote (`message`, max 200 chars) |
 
@@ -133,9 +137,11 @@ wandering blind.
   just because the forest is temporarily empty.
 - **Check quest progress** via `/status.active_quests` before wandering —
   each quest needs you to hold specific items (`2/3 Rat Pelt delivered`);
-  kills alone finish nothing. Farm the source monsters (kill drops auto-loot),
-  `pick_up` seeded ground loot, travel back to `turn_in_at`, `talk_to_npc` to check in, and turn in
-  when have/need is complete.
+  kills alone finish nothing. You can carry only one unfinished quest, so do
+  not accept another until this one is turned in. Farm the source monsters
+  (kill drops auto-loot), `pick_up` seeded ground loot, travel back to
+  `turn_in_at`, `talk_to_npc` to check in, and turn in when have/need is
+  complete.
 - **Scout before you fight — and before you walk.** `world/here.monsters`
   and `agents_present` show what shares your tile, and `scout` peeks at an
   adjacent tile's danger, foes, quests, and loot without moving. Check

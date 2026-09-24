@@ -120,7 +120,10 @@ Implemented rules; the server (`backend/app/`) is authoritative on all of it.
   with `min_level` gates (1/2/2/3/3/5) and level-scaled rewards (~1200 quest
   XP + kill XP ≈ level 5 on full clear). slaying monsters only matters
   insofar as they drop the required items; `turn_in_quest` checks inventory
-  and consumes the items. Quests are given and returned **in person**:
+  and consumes the items. A player can have only one unfinished quest at a
+  time: the server blocks a second acceptance with `QUEST_ACTIVE`, and NPCs
+  tell the player to finish and turn in the current quest first. Quests are
+  given and returned **in person**:
   `accept_quest` needs the giver's location + a `talk_to_npc` there, and
   `turn_in_quest` needs the giver's location + a `talk_to_npc` check-in
   while holding enough items (`WRONG_LOCATION` / `TALK_FIRST` otherwise).

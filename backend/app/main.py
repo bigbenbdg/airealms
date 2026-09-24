@@ -229,6 +229,27 @@ def _require_giver_presence(agent, quest_id: str, purpose: str):
             f"(talk_to_npc), then {purpose}.")
 
 
+def _first_active_quest(quests) -> dict | None:
+    """Return the first unfinished quest entry, if any.
+
+    A player may carry only one unfinished quest.  Keep this check tolerant of
+    legacy/malformed rows so an unfinished entry still blocks a new acceptance
+    instead of letting an invalid record bypass the server-side rule.
+    """
+    for quest in quests if isinstance(quests, list) else []:
+        if isinstance(quest, dict) and not quest.get("done"):
+            return quest
+    return None
+
+
+def _quest_label(quest: dict) -> str:
+    """Human-readable label for a stored quest entry."""
+    quest_id = quest.get("quest_id") if isinstance(quest, dict) else ""
+    title = quest.get("title") if isinstance(quest, dict) else ""
+    spec = QUESTS.get(quest_id, {}) if quest_id else {}
+    return title or spec.get("title") or quest_id or "your current quest"
+
+
 def _active_quests_snapshot(agent) -> list:
     """Active quest log for the per-turn player snapshot — same shape as
     GET /status active_quests, rebuilt from post-action state."""
@@ -868,6 +889,9 @@ def _apply_action(db, agent, action, params):
         buys = buys_for(nid)
         offered = [q for qid, q in QUESTS.items() if q["giver"] == nid]
         mine = {q["quest_id"]: q for q in quests}
+        active = _first_active_quest(quests)
+        active_qid = active.get("quest_id") if active else ""
+        active_title = _quest_label(active) if active else ""
         lines, offers = [], []
         for qid in QUESTS:
             spec = QUESTS[qid]
@@ -878,9 +902,13 @@ def _apply_action(db, agent, action, params):
             if state and state.get("done"):
                 status, note = "completed", (f"'{spec['title']}' is done — fine work, {agent.name}. ")
             elif state:
-                status, note = "in_progress", (f"How goes '{spec['title']}'? {_quest_progress(inv, spec)} — "
+                status, note = "in_progress", (f"How goes your active quest '{spec['title']}'? "
+                                               f"{_quest_progress(inv, spec)} — "
                                                f"you'll find {_quest_hint(spec)}. "
                                                f"Bring the goods and turn_in_quest when you hold enough. ")
+            elif active:
+                status, note = "blocked", (f"You already have an active quest — '{active_title}'. "
+                                           f"Finish it and turn it in before accepting another quest. ")
             elif not level_ok:
                 status, note = "locked", (f"'{spec['title']}' [{qid}] needs level {spec.get('min_level', 1)} — "
                                           f"come back stronger. ")
@@ -890,7 +918,14 @@ def _apply_action(db, agent, action, params):
             lines.append(note)
             offers.append({"quest_id": qid, **spec, "level_ok": level_ok,
                            "repeatable": False,
-                           "completed": status == "completed", "status": status})
+                           "completed": status == "completed", "status": status,
+                           "can_accept": status == "available",
+                           "blocked_by_active_quest": active_qid if status == "blocked" else ""})
+        # NPCs without a quest offer should still explain why a newly offered
+        # quest cannot be taken right now.
+        if active and not offers:
+            lines.append(f"You already have an active quest — '{active_title}'. "
+                         f"Finish it and turn it in before accepting another quest. ")
         # Point at other work when this NPC has nothing new for the player.
         if all(o["status"] != "available" for o in offers):
             tips = []
@@ -948,8 +983,18 @@ def _apply_action(db, agent, action, params):
         if existing:
             giver = _giver_npc(qid)
             who = giver["name"] if giver else "The quest giver"
-            err("INVALID_PARAMS", f"{who} pats your pack: you're already carrying '{spec['title']}' — "
-                                  f"there's no taking it twice. Finish it and turn it in instead.")
+            err("INVALID_PARAMS", f"{who} pats your pack: you're already carrying the active quest "
+                                  f"'{spec['title']}' — there's no taking it twice. Finish it and "
+                                  f"turn it in instead.")
+        # A character may carry only one unfinished quest.  Reject a different
+        # offer before changing any state, with the target NPC explaining why.
+        active = _first_active_quest(quests)
+        if active:
+            giver = _giver_npc(qid)
+            who = giver["name"] if giver else "The quest giver"
+            err("QUEST_ACTIVE", f"{who} says: you already have an active quest — "
+                                f"'{_quest_label(active)}'. Finish it and turn it in before "
+                                f"accepting another quest.")
         need = spec.get("min_level", 1)
         if agent.level < need:
             err("QUEST_LOCKED", f"'{spec['title']}' requires level {need} (you are level {agent.level}). "
