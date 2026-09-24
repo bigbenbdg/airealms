@@ -32,3 +32,11 @@ The procedural scene uses a piece-based joint hierarchy so silhouette and timing
 can be approved quickly. The final roster should convert those conventions to
 armatures/GLB only after the style is accepted. Original player and monster PNGs
 are used as references and are never modified by the generator.
+
+## Reference-driven player retry
+
+The newer multi-view reconstruction is documented in `reference3d/README.md`.
+It uses the supplied front, back, three-quarter, and face screenshots as hidden
+construction references and produces a true-3D player plus a Giant Rat combat
+layout. The earlier `source/` and `previews/` files above are retained as the
+initial pipeline prototype for comparison.

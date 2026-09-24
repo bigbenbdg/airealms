@@ -9,3 +9,5 @@ node_modules/
 frontend/dist/
 .DS_Store
 *.blend1
+# Local multi-view reference captures
+/Screenshot*.png
