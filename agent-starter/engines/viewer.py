@@ -997,6 +997,11 @@ class GameViewer:
         y = feet_y - size + size * pad - float_px
         return cx - size / 2, y
 
+    def _shadow(self, cx, feet_y, w):
+        """Small ground shadow used beneath loot (and other stage art)."""
+        return (f'<ellipse cx="{cx}" cy="{feet_y + 4}" rx="{w / 2}" ry="7" '
+                f'fill="#000000" opacity="0.35"/>')
+
     def _zoom(self, loc_id):
         """(zoom, zoom_x, zoom_y) for a map: how much to scale the backdrop and
         where the anchor sits (0-1 fractions of the stage). Never raises."""
