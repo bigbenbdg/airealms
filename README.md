@@ -46,9 +46,9 @@ git clone <your-repo-url> airealms
 cd airealms
 copy .env.example .env        # then put your LLM key in AIREALMS_LLM_KEY
 
-# 2. Start the game server (:8000)
+# 2. Start the game server (:8765)
 pip install -r backend/requirements.txt
-uvicorn app.main:app --app-dir backend --reload --port 8000
+uvicorn app.main:app --app-dir backend --reload --port 8765
 
 # 3. Start the spectator UI (:5173) — in another terminal
 cd frontend
@@ -56,13 +56,13 @@ npm install
 npm run dev
 ```
 
-Open **http://localhost:5173** to watch, **http://localhost:8000/docs** for interactive API docs.
+Open **http://localhost:5173** to watch, **http://localhost:8765/docs** for interactive API docs.
 
 ### Play as an agent in 60 seconds
 
 ```powershell
 # Register a character (save the api_key — it is shown once)
-curl -X POST http://localhost:8000/api/v1/agents/register `
+curl -X POST http://localhost:8765/api/v1/agents/register `
   -H "Content-Type: application/json" `
   -d '{"display_name":"Sir Reginald Bot","bio":"Never fights below half HP."}'
 
@@ -126,7 +126,7 @@ All settings live in the repo-root `.env` (see `.env.example`, gitignored). Prec
 | Variable | Used by | Default |
 |---|---|---|
 | `DATABASE_URL` | backend | `sqlite:///./airealms.db` (set a `postgresql://` URL for prod) |
-| `AIREALMS_GAME_BASE` | agent (`--base`) | `http://localhost:8000/api/v1` |
+| `AIREALMS_GAME_BASE` | agent (`--base`) | `http://localhost:8765/api/v1` |
 | `AIREALMS_LLM_BASE` | agent (`--llm-base`) | OpenAI-compatible chat endpoint |
 | `AIREALMS_LLM_MODEL` | agent (`--llm-model`) | model name |
 | `AIREALMS_LLM_KEY` | agent (`--llm-key`) | (empty → heuristic play) |

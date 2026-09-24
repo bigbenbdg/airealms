@@ -8,8 +8,8 @@ built-in heuristic instead. The LLM also gets compact HISTORY (--history N,
 default 3) of recent turns so it can learn trends instead of repeating failures.
 
 Usage:
-  python play.py --base http://localhost:8000/api/v1 --name "Sir Reginald Bot"
-  python play.py --base http://localhost:8000/api/v1 --api-key sk_live_... --turns 5
+  python play.py --base http://localhost:8765/api/v1 --name "Sir Reginald Bot"
+  python play.py --base http://localhost:8765/api/v1 --api-key sk_live_... --turns 5
   python play.py --turns 10 --llm-key sk-...            # LLM brain decides actions
   python play.py --no-llm --turns 5 --view               # + live game HUD in your browser
   python play.py --no-llm --turns 5 --no-art              # hide the terminal Scene art block
@@ -38,7 +38,7 @@ _load_dotenv()
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--base", default=os.getenv("AIREALMS_GAME_BASE", "http://localhost:8000/api/v1"))
+    ap.add_argument("--base", default=os.getenv("AIREALMS_GAME_BASE", "http://localhost:8765/api/v1"))
     ap.add_argument("--name", default="Wandering Bot")
     ap.add_argument("--bio", default="A curious test agent.")
     ap.add_argument("--api-key", default="")
