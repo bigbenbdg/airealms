@@ -29,6 +29,44 @@ def register(client, name="Tester"):
     return r.json()["data"]
 
 
+def test_model_probe_logs_verbose_request_with_secrets_redacted(monkeypatch):
+    records = []
+    monkeypatch.setattr(
+        main_module.model_probe_logger,
+        "info",
+        lambda *args, **kwargs: records.append((args, kwargs)),
+    )
+    client = TestClient(app)
+    response = client.get(
+        "/v1/models?probe=1",
+        headers={
+            "Authorization": "Bearer top-secret",
+            "Cookie": "session=top-secret",
+            "User-Agent": "ModelProbe/1.0",
+            "X-Probe-ID": "probe-123",
+        },
+    )
+
+    assert response.status_code == 404
+    assert len(records) == 2
+    request_args, _ = records[0]
+    request_log = request_args[0] % request_args[1:]
+    response_args, _ = records[1]
+    response_log = response_args[0] % response_args[1:]
+    assert "method=GET" in request_log
+    assert "probe=1" in request_log
+    assert "'user-agent': 'ModelProbe/1.0'" in request_log
+    assert "'x-probe-id': 'probe-123'" in request_log
+    assert "'authorization': '<redacted>'" in request_log
+    assert "'cookie': '<redacted>'" in request_log
+    assert "top-secret" not in request_log
+    assert "body=b''" in request_log
+    assert "status=404" in response_log
+
+    client.get("/health")
+    assert len(records) == 2, "only /v1/models probes should get verbose logging"
+
+
 def test_register_status_here_schema():
     c = fresh_client()
     reg = register(c)

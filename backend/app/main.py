@@ -1,5 +1,6 @@
 """AI Realms game server — FastAPI. Implements 02-api-spec.md v1."""
 import json
+import logging
 import secrets
 from datetime import datetime, timezone
 from pathlib import Path
@@ -37,6 +38,48 @@ except Exception:
 
 app = FastAPI(title="AI Realms", version="1.0.0")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+
+# OpenAI-compatible clients commonly probe this path even when AI Realms was
+# accidentally selected as their model provider. Keep the route missing, but
+# make the probe identifiable in the Uvicorn console without leaking secrets.
+model_probe_logger = logging.getLogger("uvicorn.error")
+_REDACTED_HEADERS = {
+    "api-key", "authorization", "cookie", "proxy-authorization",
+    "set-cookie", "x-api-key",
+}
+
+
+def _headers_for_probe_log(headers):
+    return {
+        name: "<redacted>" if name.lower() in _REDACTED_HEADERS else value
+        for name, value in headers.items()
+    }
+
+
+@app.middleware("http")
+async def log_model_probe(request: Request, call_next):
+    if request.url.path != "/v1/models":
+        return await call_next(request)
+
+    body = await request.body()
+    client = request.client
+    client_text = f"{client.host}:{client.port}" if client else "<unknown>"
+    model_probe_logger.info(
+        "AI Realms model probe request: client=%s method=%s url=%s headers=%s body=%r",
+        client_text,
+        request.method,
+        str(request.url),
+        _headers_for_probe_log(request.headers),
+        body[:2048],
+    )
+    response = await call_next(request)
+    model_probe_logger.info(
+        "AI Realms model probe response: client=%s status=%s",
+        client_text,
+        response.status_code,
+    )
+    return response
+
 
 SKILL_PATH = Path(__file__).resolve().parents[2] / "03-SKILLS.md"
 _skill_cache = None
