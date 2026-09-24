@@ -5,7 +5,7 @@ The brain is an OpenAI-compatible chat model (configure via --llm-base/--llm-mod
 LLM mode never falls back: any bad/missing reply is fed back as a retry
 note and asked again after 10s on refreshed state. `--no-llm` forces the
 built-in heuristic instead. The LLM also gets compact HISTORY (--history N,
-default 3) of recent turns so it can learn trends instead of repeating failures.
+default 10) of recent turns so it can learn trends instead of repeating failures.
 
 Usage:
   python play.py                                      # 50 turns, live HUD, no terminal art
@@ -55,8 +55,8 @@ def main():
     ap.add_argument("--goal", default="",
                     help="objective read to the LLM every turn (default: server /meta/goals)")
     ap.add_argument("--no-llm", action="store_true", help="force heuristic play, ignore LLM")
-    ap.add_argument("--history", type=int, default=int(os.getenv("AIREALMS_HISTORY", "3")),
-                    help="how many past turns of compact history to feed the LLM (0 disables)")
+    ap.add_argument("--history", type=int, default=int(os.getenv("AIREALMS_HISTORY", "10")),
+                    help="how many past turns of compact history to feed the LLM (default: 10; 0 disables)")
     ap.add_argument("--verbose", action="store_true",
                     default=os.getenv("AIREALMS_VERBOSE", "").lower() in ("1", "true", "yes", "on"),
                     help="print full server envelopes (status/here/action result) each turn")
