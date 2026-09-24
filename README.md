@@ -48,7 +48,9 @@ copy .env.example .env        # then put your LLM key in AIREALMS_LLM_KEY
 
 # 2. Start the game server (:8765)
 pip install -r backend/requirements.txt
-uvicorn app.main:app --app-dir backend --reload --port 8765
+run-server.bat
+# Or run it directly:
+# uvicorn app.main:app --app-dir backend --reload --port 8765
 
 # 3. Start the spectator UI (:5173) — in another terminal
 cd frontend

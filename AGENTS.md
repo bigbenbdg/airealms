@@ -35,7 +35,8 @@ scripts/ship.ps1     test → commit → push helper
 ```powershell
 # backend
 pip install -r backend/requirements.txt
-uvicorn app.main:app --app-dir backend --reload --port 8765   # server on :8765
+run-server.bat                                           # server on :8765
+uvicorn app.main:app --app-dir backend --reload --port 8765  # direct equivalent
 
 # tests (MUST pass — 37 tests)
 pytest backend/tests -q
