@@ -49,13 +49,13 @@ the shape and interactions are concrete rather than theoretical.
 > Blender-rendered backdrop per location under `assets/backgrounds/`. It serves
 > a local `127.0.0.1` HUD that polls `state.json` and patches the backdrop
 > (preloaded crossfade), tokens, and HUD in place — no `<meta refresh>` full
-> reload. It opens on a title screen: a collage of all six map backdrops with
-> an ink frame and gold serif "AI REALMS" title (style-referenced from the
-> Blender render `assets/backgrounds/title_reference.png`), which fades out
-> automatically as soon as the agent's first turn starts (clicking skips it).
-> A frame without a backdrop holds the last shown backdrop instead of
-> swapping to the drawn-terrain SVG; the drawn terrain remains only in the
-> legacy file-snapshot fallback page. Those PNGs are available to the SPA too
+> reload. It opens on a title screen using the full Blender-rendered
+> `assets/backgrounds/title_reference.png` artwork (with a six-map collage
+> fallback for older asset checkouts), which fades out automatically as soon as
+> the agent's first turn starts (clicking skips it). A frame without a backdrop
+> holds the last shown backdrop instead of swapping to the drawn-terrain SVG;
+> the drawn terrain remains only in the legacy file-snapshot fallback page.
+> Those PNGs are available to the SPA too
 > (served at `/assets/...`) if it ever wants illustrated zone backdrops; the
 > map above stays SVG-only by design.
 

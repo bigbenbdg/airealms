@@ -145,9 +145,8 @@ SPRITE_VIEWBOX = {
 }
 DEFAULT_SPRITE_VIEWBOX = (0, 0, 2048, 2048)
 
-# Opening screen: all six Blender-rendered map backgrounds as one collage,
-# laid out like the title_reference.png style render (3x2 grid, ink frame,
-# gold Georgia title). Missing files fall back to drawn-terrain gradients.
+# Opening screen: use the full title_reference.png artwork when available.
+# The six-map collage remains a graceful fallback for older asset checkouts.
 TITLE_MAPS = (
     ("riverside_village", "Riverside Village"),
     ("oakhollow_forest", "Oakhollow Forest"),
@@ -215,8 +214,13 @@ def _hp_color(hp, max_hp):
     return BLOOD
 
 
-def _http_asset_path(assets_dir, rel):
-    """Public /assets/... path for a repo-relative asset, or '' when missing. Never raises."""
+def _http_asset_path(assets_dir, rel, cache_bust=False):
+    """Public /assets/... path for a repo-relative asset, or '' when missing.
+
+    ``cache_bust`` appends the source mtime so replacing an image with the
+    same filename is visible immediately in an already-open viewer. Never
+    raises.
+    """
     try:
         path = _local_file(assets_dir, rel or "")
         if not path or not os.path.exists(path):
@@ -225,7 +229,10 @@ def _http_asset_path(assets_dir, rel):
         rel_path = os.path.relpath(os.path.abspath(path), base).replace(os.sep, "/")
         if rel_path.startswith(".."):
             return ""
-        return "/assets/" + rel_path
+        url = "/assets/" + rel_path
+        if cache_bust:
+            url += f"?v={os.stat(path).st_mtime_ns}"
+        return url
     except Exception:
         return ""
 
@@ -596,12 +603,29 @@ class GameViewer:
     # -- stage ---------------------------------------------------------
     # -- opening screen -------------------------------------------------
     def _title_screen_html(self):
-        """Overlay collage of all six map backdrops, Blender-reference styled.
+        """Full-screen opening artwork, with a collage fallback.
 
-        Shown when the viewer first loads; JS dismisses it (fade) on click or
-        as soon as the first real turn arrives. Missing files fall back to a
-        per-location-type gradient so the screen never breaks. Never raises."""
+        ``title_reference.png`` is the canonical opening image. It is loaded
+        through the viewer's asset route with an mtime cache-buster so a newly
+        replaced image is not hidden by the browser cache. If the file is
+        missing, retain the six-map collage for older asset checkouts.
+        """
         try:
+            title_url = self.title_background_url()
+            if title_url:
+                return (
+                    '<div id="titlescreen" style="position:fixed;inset:0;z-index:60;'
+                    'background:#0B0D13;display:block;cursor:pointer;'
+                    'transition:opacity .6s ease;">'
+                    f'<img src="{_esc(title_url)}" alt="AI Realms" '
+                    'style="position:absolute;inset:0;width:100%;height:100%;'
+                    'object-fit:cover;display:block;"/>'
+                    '<div style="position:absolute;left:0;right:0;bottom:16px;'
+                    'text-align:center;font-size:11px;color:rgba(237,231,217,.72);'
+                    'text-shadow:0 1px 5px #000;pointer-events:none;">'
+                    'click anywhere to enter the realm</div>'
+                    '</div>')
+
             panels = []
             for loc_id, label in TITLE_MAPS:
                 url = self.background_http_path(loc_id) or self.background_url(loc_id)
@@ -653,13 +677,21 @@ class GameViewer:
         except Exception:
             return ""
 
-    def background_http_path(self, loc_id):
+    def background_http_path(self, loc_id, cache_bust=False):
         """/assets/... path of the Blender-rendered backdrop, or '' when missing."""
         try:
             if not (self.assets_dir and loc_id):
                 return ""
             rel = f"backgrounds/{loc_id}.png"
-            return _http_asset_path(self.assets_dir, rel)
+            return _http_asset_path(self.assets_dir, rel, cache_bust=cache_bust)
+        except Exception:
+            return ""
+
+    def title_background_url(self):
+        """URL for the canonical opening image, bypassing stale browser caches."""
+        try:
+            return (self.background_http_path("title_reference", cache_bust=True)
+                    or self.background_url("title_reference"))
         except Exception:
             return ""
 

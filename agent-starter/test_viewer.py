@@ -64,3 +64,19 @@ def test_oakhollow_frame_with_ground_loot_is_visible():
         assert "Giant Rat" in state["labels_svg"]
     finally:
         viewer.stop()
+
+
+def test_opening_screen_uses_title_reference_artwork():
+    assets_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "assets"))
+    viewer = GameViewer(
+        assets_dir=assets_dir,
+        refresh=0,
+        path=os.path.join(tempfile.gettempdir(), "airealms-viewer-title-regression.html"),
+        port=0,
+    )
+    try:
+        opening = viewer._title_screen_html()
+        assert "/assets/backgrounds/title_reference.png?v=" in opening
+        assert "riverside_village.png" not in opening
+    finally:
+        viewer.stop()
