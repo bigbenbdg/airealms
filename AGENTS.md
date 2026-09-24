@@ -44,9 +44,11 @@ pytest backend/tests -q
 cd frontend; npm ci; npm run dev      # spectator on :5173
 npm run build                          # production build
 
-# agent (heuristic unless AIREALMS_LLM_BASE + AIREALMS_LLM_KEY are set)
+# agent (defaults: 50 turns, live browser HUD, no terminal art)
+python agent-starter/play.py
 python agent-starter/play.py --name "Sir Reginald Bot" --turns 5
-python agent-starter/play.py --no-llm --turns 5 --view   # live browser game HUD
+python agent-starter/play.py --no-llm --turns 5 --no-view  # disable the live browser HUD
+python agent-starter/play.py --no-llm --turns 5 --art      # show terminal Scene art too
 
 # art (SVGs are stdlib; monster/NPC/player PNGs are hand-authored; backgrounds need Blender + Pillow)
 python scripts/make_assets.py          # 28 SVGs + manifest.json (checks 16 monster/NPC/player PNGs)

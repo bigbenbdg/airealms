@@ -8,11 +8,12 @@ built-in heuristic instead. The LLM also gets compact HISTORY (--history N,
 default 3) of recent turns so it can learn trends instead of repeating failures.
 
 Usage:
+  python play.py                                      # 50 turns, live HUD, no terminal art
   python play.py --base http://localhost:8765/api/v1 --name "Sir Reginald Bot"
   python play.py --base http://localhost:8765/api/v1 --api-key sk_live_... --turns 5
   python play.py --turns 10 --llm-key sk-...            # LLM brain decides actions
-  python play.py --no-llm --turns 5 --view               # + live game HUD in your browser
-  python play.py --no-llm --turns 5 --no-art              # hide the terminal Scene art block
+  python play.py --no-llm --turns 5 --no-view           # disable the live browser HUD
+  python play.py --no-llm --turns 5 --art               # show terminal Scene art too
   Config lives in the repo-root .env (AIREALMS_GAME_BASE/LLM_BASE/MODEL/KEY);
   flags and real environment variables override .env.
 
@@ -42,7 +43,8 @@ def main():
     ap.add_argument("--name", default="Wandering Bot")
     ap.add_argument("--bio", default="A curious test agent.")
     ap.add_argument("--api-key", default="")
-    ap.add_argument("--turns", type=int, default=3)
+    ap.add_argument("--turns", type=int, default=50,
+                    help="number of game turns to play (default: 50)")
     ap.add_argument("--llm-base", default=os.getenv("AIREALMS_LLM_BASE", ""))
     ap.add_argument("--llm-model", default=os.getenv("AIREALMS_LLM_MODEL", ""))
     ap.add_argument("--llm-key", default=os.getenv("AIREALMS_LLM_KEY", ""))
@@ -60,14 +62,14 @@ def main():
                     help="print full server envelopes (status/here/action result) each turn")
     ap.add_argument("--assets-dir", default=os.getenv("AIREALMS_ASSETS_DIR", ""),
                     help="local assets/ checkout for game art (default: auto-detect repo assets/)")
-    _art_default = os.getenv("AIREALMS_ART", "").lower() not in ("0", "false", "no", "off")
+    _art_default = os.getenv("AIREALMS_ART", "").lower() in ("1", "true", "yes", "on")
     ap.add_argument("--art", dest="art", action=argparse.BooleanOptionalAction,
                     default=_art_default,
-                    help="show or hide the terminal Scene art block (--art / --no-art, default: show)")
+                    help="show or hide terminal Scene art (default: hide; use --art to show)")
     ap.add_argument("--open-images", action="store_true",
                     help="also open the current location SVG in your viewer each turn")
-    ap.add_argument("--view", action="store_true",
-                    help="open a live game HUD (local server, updates in place, no full reload) in your browser")
+    ap.add_argument("--view", action=argparse.BooleanOptionalAction, default=True,
+                    help="open a live game HUD (default: enabled; use --no-view to disable)")
     ap.add_argument("--view-file", default=os.getenv("AIREALMS_VIEW_FILE", ""),
                     help="where to write the game HUD snapshot html (default: temp airealms-viewer.html)")
     ap.add_argument("--view-refresh", type=float, default=float(os.getenv("AIREALMS_VIEW_REFRESH", "1")),
@@ -108,7 +110,7 @@ def main():
         print("Brain: heuristic fallback (set AIREALMS_LLM_BASE + AIREALMS_LLM_KEY, "
               "or pass --llm-base/--llm-key, to enable the LLM brain)")
 
-    # Terminal art: --art / --no-art (or AIREALMS_ART=0) controls ONLY the
+    # Terminal art: --art / --no-art (or AIREALMS_ART=1) controls ONLY the
     # CLI Scene block. The browser HUD (--view) always renders art when it
     # can, so assets are resolved independently of the terminal toggle.
     show_art = bool(args.art)
